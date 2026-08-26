@@ -1,114 +1,127 @@
 from itertools import combinations
-
 import numpy as np
 import pandas as pd
 from sklearn import metrics
 from sklearn.model_selection import TimeSeriesSplit
 from xgboost import XGBClassifier
+from pipeline.config import SYMBOLS
 
-df = pd.read_csv('output/data/engineered_data.csv')
+def build_feature_set(groups):
+    feature_sets = {}
 
-pd.set_option('display.max_column', None)
-pd.set_option('display.width', 1000)
+    for size in range(1, len(groups)+1):
+        # Calculate the combinations based on the size its on, size = 1 means a combination of 1 item
+        for combo in combinations(groups.keys(), size):
+            label = '+'.join(combo)
+            columns = []
+            # We add it all up here for the combination
+            for name in combo:
+                columns = columns + groups[name]
+            feature_sets[label] = columns
 
-# Feature
-x = df.drop(columns=['symbol','target_5d', 'fwd_5d_return', 'close', 'high', 'open', 'low', 'timestamp', 'volume', 'vwap', 'SMA_10', 'SMA_30'])
-print(x.head())
-# Target set
-y = df['target_5d']
+    return feature_sets
 
-# Split into the features into groups
-# Group A: Price/Return (Has the price been going up or down, and by how much over some window)
-group_a = ['daily_return', 'momentum_5','momentum_10', 'momentum_20']
+def run_ablation(symbol):
+    df = pd.read_csv(f'output/data/engineered_{symbol}.csv')
 
-# Group B: Trend/Technical (Is the moment unusual relative to its own recent pattern?)
-# RSI summarizes trend strength (is this overbought/oversold)
-# distance-from-SMA summarizes how stretched the prie is from the average price
-group_b = ['RSI', 'distance_SMA10', 'distance_SMA30']
+    pd.set_option('display.max_column', None)
+    pd.set_option('display.width', 1000)
 
-# Group C: Volatility (How much the stock swings, regardless of the direction)
-group_c = ['volatility_5','volatility_10', 'ATR_5', 'ATR_10']
+    # Feature
+    x = df.drop(columns=['target_5d', 'fwd_5d_return', 'close', 'high', 'open', 'low', 'timestamp', 'volume', 'vwap', 'SMA_10', 'SMA_30'])
+    print(x.head())
+    # Target set
+    y = df['target_5d']
 
-# Group D: Volume (How many people are trading)
-group_d = ['volume_spike', 'trade_count']
+    # Split into the features into groups
+    # Group A: Price/Return (Has the price been going up or down, and by how much over some window)
+    group_a = ['daily_return', 'momentum_5','momentum_10', 'momentum_20']
 
-# Build the feature sets
-# We'll test A alone, then A+B, then A+B+C
-groups = {
-    'A': group_a,
-    'B': group_b,
-    'C': group_c,
-    'D': group_d,
-}
-feature_sets = {
+    # Group B: Trend/Technical (Is the moment unusual relative to its own recent pattern?)
+    # RSI summarizes trend strength (is this overbought/oversold)
+    # distance-from-SMA summarizes how stretched the prie is from the average price
+    group_b = ['RSI', 'distance_SMA10', 'distance_SMA30']
 
-}
+    # Group C: Volatility (How much the stock swings, regardless of the direction)
+    group_c = ['volatility_5','volatility_10', 'ATR_5', 'ATR_10']
 
-for size in range(1, len(groups)+1):
-    # Calculate the combinations based on the size its on, size = 1 means a combination of 1 item
-    for combo in combinations(groups.keys(), size):
-        label = '+'.join(combo)
-        columns = []
-        # We add it all up here for the combination
-        for name in combo:
-            columns = columns + groups[name]
-        feature_sets[label] = columns
+    # Group D: Volume (How many people are trading)
+    group_d = ['volume_spike', 'trade_count']
 
-# Split the dataset
-tcsv = TimeSeriesSplit(n_splits=5)
-results = []
+    # Build the feature sets
+    # We'll test A alone, then A+B, then A+B+C
+    groups = {
+        'A': group_a,
+        'B': group_b,
+        'C': group_c,
+        'D': group_d,
+    }
 
-for label, columns in feature_sets.items():
-    x_subset = x[columns]
-    for i, (train_idx, test_idx) in enumerate(tcsv.split(x_subset)):
-        x_train, x_test = x_subset.iloc[train_idx], x_subset.iloc[test_idx]
-        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+    feature_sets = build_feature_set(groups)
 
-        model = XGBClassifier (
-                    n_estimators=50,
-                    max_depth=2,
-                    subsample=0.8,
-                    learning_rate=0.1,
-                    eval_metric='logloss',   # Evaluation metric for training validation
-                    reg_lambda=1.0,          # L2 Regularization: penalizes extreme predictions (Default is 1.0)
-                    reg_alpha=0.1,          # L1 regularization term on weights (deletes weak branches)
+    # Split the dataset
+    tcsv = TimeSeriesSplit(n_splits=5)
+    results = []
+
+    for label, columns in feature_sets.items():
+        x_subset = x[columns]
+        for i, (train_idx, test_idx) in enumerate(tcsv.split(x_subset)):
+            x_train, x_test = x_subset.iloc[train_idx], x_subset.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+            model = XGBClassifier (
+                        n_estimators=50,
+                        max_depth=2,
+                        subsample=0.8,
+                        learning_rate=0.1,
+                        eval_metric='logloss',   # Evaluation metric for training validation
+                        reg_lambda=1.0,          # L2 Regularization: penalizes extreme predictions (Default is 1.0)
+                        reg_alpha=0.1,          # L1 regularization term on weights (deletes weak branches)
+                )
+
+            model.fit(x_train, y_train)
+            y_pred = model.predict(x_test)
+            pred_prob = model.predict_proba(x_test)[:,1]
+
+            # Evaluation
+            acc = metrics.accuracy_score(y_test, y_pred)
+            roauc = metrics.roc_auc_score(y_test, pred_prob)
+
+            # We append the result into a list
+            results.append(
+                {
+                    'symbol': symbol,
+                    'label': label,
+                    'fold': i,
+                    'accuracy': acc,
+                    'roc_auc': roauc
+                }
             )
 
-        model.fit(x_train, y_train)
-        y_pred = model.predict(x_test)
-        pred_prob = model.predict_proba(x_test)[:,1]
+    # DataFrame can't be append, so it must be done, outside of the loop
+    results = pd.DataFrame(results)
+    # print('\nCROSS VALIDATION EVALUATION\n')
 
-        # Evaluation
-        acc = metrics.accuracy_score(y_test, y_pred)
-        roauc = metrics.roc_auc_score(y_test, pred_prob)
+    # We summarize it into a table instead
+    summary = results.groupby('label').agg(
+        auc_mean=('roc_auc', 'mean'),
+        auc_std=('roc_auc', 'std'),
+        acc_mean=('accuracy', 'mean'),
+        # An inline function that sums roc_auc that is more than 0.5
+        folds_above_half=('roc_auc', lambda s: (s >= 0.5).sum())
+    ).sort_values(['folds_above_half', 'auc_mean'], ascending=False)
 
-        # We append the result into a list
-        results.append(
-            {
-                'label': label,
-                'fold': i,
-                'accuracy': acc,
-                'roc_auc': roauc
-            }
-        )
+    summary['symbol'] = symbol
 
-# DataFrame can't be append, so it must be done, outside of the loop
-results = pd.DataFrame(results)
-print('\nCROSS VALIDATION EVALUATION\n')
+    # print(summary.round(3))
+    return summary.round(3)
 
-# We summarize it into a table instead
-summary = results.groupby('label').agg(
-    auc_mean=('roc_auc', 'mean'),
-    auc_std=('roc_auc', 'std'),
-    acc_mean=('accuracy', 'mean'),
-    # An inline function that sums roc_auc that is more than 0.5
-    folds_above_half=('roc_auc', lambda s: (s >= 0.5).sum())
-).sort_values(['folds_above_half', 'auc_mean'], ascending=False)
-
-print(summary.round(3))
+if __name__ ==  '__main__':
+    for s in SYMBOLS:
+        run_ablation(s)
 
 
-# Results of this experiment
+# Results of this experiment with AAPL stock:
 
 # Group B is the most stable with 5 out of 5 folds that has above 0.5 in terms of accuracy and ROC-AUC
 # Then, Group A was also stable with 4 out of 5 folds. This means that group B has the most stable and

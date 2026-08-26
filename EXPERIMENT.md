@@ -148,12 +148,43 @@ All four sit in a similar, already-known overfitting range — no red flags disq
 
 ---
 
+## Experiment 4 — Multi-Stock Generalization Check
+
+**Scripts:** full pipeline refactored into reusable functions and orchestrated by `pipeline/run_all.py` — `fetch_and_save()` (`extract.py`), `engineer_features()` (`transform.py`), and `run_baseline()`/`run_logistic_model()`/`run_xgb_model()`/`run_xgb_stability()`/`run_ablation()` (`pipeline/model/`), all reading symbols/date range from a single `pipeline/config.py`.
+
+**What we did:** Re-ran the exact same 15-combination ablation sweep (Experiment 3) independently across 5 symbols from different sectors — `AAPL`, `MSFT` (tech), `JPM` (financials), `KO` (consumer staples), `XOM` (energy) — to test whether the `A+D`/`B` edge found on AAPL alone was a genuine market-wide pattern or an AAPL-specific idiosyncrasy.
+
+**Why:** Every prior experiment (0 through 3) was run on AAPL only. A pattern found on one symbol could easily be idiosyncratic to that stock rather than reflecting anything general about price/volume technical features — the plan's own robustness checks flag exactly this risk.
+
+**Results — how many of the 5 stocks each combination hits ≥4/5 folds ≥ 0.5 on:**
+
+| Combo | Stocks hitting ≥4/5 folds | Avg AUC across stocks |
+|---|---|---|
+| **B+D** | **2 / 5** (KO, XOM) | 0.496 |
+| A+D | 1 / 5 (AAPL only) | 0.489 |
+| A, B, C, A+B+D, A+B+C, A+B | 1 / 5 each | 0.485–0.494 |
+| D, C+D, A+C+D, A+C, B+C, B+C+D, A+B+C+D | 0 / 5 | 0.483–0.496 |
+
+**Per-symbol detail for the two previously-leading combos:**
+
+| Symbol | A+D (folds ≥0.5) | B+D (folds ≥0.5) |
+|---|---|---|
+| AAPL | 5/5 | 3/5 |
+| MSFT | 1/5 | 2/5 |
+| JPM | 1/5 | 2/5 |
+| KO | 2/5 | 4/5 |
+| XOM | 2/5 | 4/5 |
+
+**Interpretation:** **`A+D`'s standout 5/5 result does not replicate on any other symbol** — it drops to 1-2/5 on MSFT, JPM, KO, and XOM, meaning the earlier "best finding of the project" was very likely specific to AAPL over this particular date range, not a general market pattern. **`B+D` is the closest thing to a cross-stock pattern found so far** (consistent ≥4/5 on KO and XOM specifically, both more defensive/traditional sectors than AAPL/MSFT/JPM), but even it only holds up on 2 of the 5 stocks tested — nowhere near the robust, general edge that would be needed to trust it broadly. **No combination generalizes convincingly across sectors.** This is a legitimate, if sobering, answer to the project's core research question: single-symbol price/volume technical ablation results should not be assumed to generalize, and the honest finding at this stage is that no tested feature combination shows a robust, cross-stock predictive edge for 5-day direction.
+
+---
+
 ## Running Synthesis (as of last entry)
 
-The story has shifted from "no exploitable signal anywhere" to a more specific, actionable one: **Group C (volatility/ATR) appears to consistently harm model performance on this data, while `A+D` (price/return + volume) and `B` alone (trend/technical) show a small, consistent edge (5/5 folds ≥ 0.5) that survived a full combinatorial sweep, not just one lucky split.** This is still a modest effect (AUC ~0.52–0.54) and has not yet been tested beyond a single symbol (AAPL) or validated with an ensemble/second-opinion approach.
+The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness). The honest conclusion at this stage: **AAPL-specific patterns (`A+D`) do not generalize; `B+D` shows a partial, sector-limited pattern (KO/XOM) that is the best lead so far but far from a robust cross-market signal.**
 
 **Next steps under consideration:**
-- Test whether ensembling separately-trained models on `A+D`, `B`, and `A` (rather than concatenating their features into one model, which is what A+B+D — a worse performer at 3/5 — already tried) produces a better or more robust combined signal.
-- Test generalization across multiple symbols, not just AAPL, to check whether the `A+D`/`B` edge and Group C's harm are a real market pattern or an AAPL-specific idiosyncrasy — likely a higher priority than simply extending AAPL's own history further.
-- Group E (market context, e.g. SPY) from the plan remains untried and is a genuinely new information source, worth considering after the above.
-- Alternatively, treat the current finding as a legitimate, reportable Phase 2 result on its own.
+- Investigate `B+D`'s KO/XOM-specific consistency further — is there a sector-level (defensive/traditional vs. tech/growth) explanation, or is 2/5 still within the range of chance given multiple testing?
+- Test whether ensembling separately-trained models (rather than concatenating features into one model) produces a more robust combined signal.
+- Group E (market context, e.g. SPY) from the plan remains untried and is a genuinely new information source.
+- Alternatively, treat "no robust cross-stock signal from price/volume technicals alone" as the project's current, legitimate Phase 2 finding, and pivot toward either a different feature source (Group E) or a different, more tolerant research question (e.g., per-symbol tuned models rather than one general model).
