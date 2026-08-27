@@ -38,7 +38,7 @@ def engineer_features(symbol):
 
     # Forward 5D Return
     # This is what the model is trying to predict, so we're basically making the target feature
-    stock_df['fwd_5d_return'] = (stock_df['close'].shift(-5) / stock_df['close'] - 1)
+    stock_df['fwd_5d_return'] = ((stock_df['close'].shift(-5) / stock_df['close']) - 1)
     # To categorize whether there is a return or not
     stock_df['target_5d'] = np.where(stock_df['fwd_5d_return'] > 0, 1, 0)
 
