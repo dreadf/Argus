@@ -179,12 +179,150 @@ All four sit in a similar, already-known overfitting range — no red flags disq
 
 ---
 
+## Experiment 5 — Pooled Panel Model Prototype
+
+**Scripts:** `pipeline/panel.py` (`build_panel_data()`, `split_by_date()`, `get_x_y()`) and `pipeline/model/pooled_xgb_model.py` (`run_pooled_xgb()`).
+
+**Why (research-driven):** `RESEARCH_pooling_vs_individual.md` surveyed the literature on individual vs. pooled vs. ensemble modeling for exactly this kind of overfitting problem. Gu-Kelly-Xiu (2020) and Sirignano-Cont (2019) both argue pooling many stocks into one training set gives a model a much richer combined scenario space, directly targeting the overfitting that plagued Experiments 2–3 (train/test gaps of 0.13–0.26). The doc's own staged recommendation was to prototype plain pooling first, before adding any stock/sector-level structure.
+
+**What we did:** Expanded `SYMBOLS` in `config.py` from 5 to **40 stocks across 11 sectors** (Technology, Communication Services, Consumer Discretionary, Consumer Staples, Financials, Healthcare, Energy, Industrials, Materials, Utilities, Real Estate) for diversity. Built a stacked panel (`build_panel_data`) — every symbol's already-engineered feature rows concatenated into one long DataFrame, each row tagged with its `symbol`. Split the *whole panel* by a single date cutoff (`split_by_date`, 80% of unique trading days as train, 20% as test) — critically, one shared cutoff date across all 40 stocks at once, not a per-symbol chronological split. Trained one `XGBClassifier` (`n_estimators=100, max_depth=4, subsample=0.8, learning_rate=0.1`) on the pooled train set; `symbol` itself was excluded from the feature set for this first pass (plain, "structure-free" pooling, matching the literature's baseline case).
+
+**Results:**
+
+| | Per-stock XGBoost (avg of 5, Experiment 4) | Pooled XGBoost (40 stocks) |
+|---|---|---|
+| Test Accuracy | 0.539 (range 0.520–0.557) | **0.527** |
+| Test ROC-AUC | 0.506 (range 0.408–0.562) | **0.498** |
+| Train − Test Gap | 0.13–0.26 (severe overfitting) | **0.068** |
+
+**Interpretation:** Accuracy and AUC are essentially unchanged from the per-stock average — both still sit at "coin flip" level. But the **train/test gap shrank by roughly 2–4x**, exactly matching Sirignano-Cont's prediction that pooling reduces overfitting by giving the model far more effective training data. This is a genuine, measured confirmation of that mechanism in our own data, not just a claim from the paper. Separately, 52.7% accuracy lines up almost exactly with **Döbelt (2026)'s own "plain pooled, structure-free" LSTM baseline (52.2%)** — independent confirmation that this ~50–55% ceiling is a real, repeated finding across the literature (Gu-Kelly-Xiu, Sirignano-Cont, Döbelt, Pesaran et al. all converge here), not a bug or a weak implementation. **Plain pooling fixes the overfitting problem but does not, by itself, push accuracy meaningfully past chance** — which is exactly why Döbelt needed to add sector embeddings (52.2% → 52.5%) and why the ensemble/hierarchical papers (Ghosn-Bengio, Feng-He, Pesaran et al.) go further than plain pooling. Next step, per the research doc's own ordering: test whether adding stock-level structure (e.g. bringing `symbol` back in as an encoded feature) recovers any of that signal.
+
+---
+
+## Experiment 6 — Panel Diagnostics: Why the Pooled Model Sits at Chance
+
+**Status:** exploratory diagnostic pass, run as throwaway analysis scripts against the existing panel — **not yet codified into `pipeline/`**. The numbers below come from a single 80/20 date split (with a purge, see below) and should be read as directional evidence, not settled results. Codifying these as repeatable pipeline stages is a next step.
+
+**Why:** Experiment 5 established that plain pooling fixes overfitting but leaves AUC at 0.498. "Accuracy is at chance" is a symptom, not a diagnosis. Before adding more model structure (sector embeddings, hierarchical priors), it is worth asking a cheaper question: *is there any signal in these features at all, and if the model is failing, how exactly is it failing?* Adding structure to a model that has no signal to work with only spends effort.
+
+### 6a — Variant sweep on the pooled panel
+
+Six variants of the pooled model, all on 40 symbols with a purged split (see 6d):
+
+| Variant | Test ROC-AUC |
+|---|---|
+| A. as-is (absolute target, raw `trade_count`, no purge) | 0.4950 |
+| B. as-is + 10-day purge at the split boundary | 0.4996 |
+| C. drop `trade_count` | 0.4917 |
+| D. cross-sectional **relative** target | 0.4973 |
+| E. cross-sectionally ranked features + relative target | 0.4985 |
+| F. cross-sectionally ranked features + absolute target | 0.4970 |
+
+Every variant lands on 0.50. None of the standard panel-modeling fixes moves the needle on AUC.
+
+### 6b — The model is not random, it is inverted
+
+Built a daily long/short book from variant E — each day, long the top-quintile-scored stocks, short the bottom quintile, hold 5 days:
+
+- Mean 5-day spread: **−0.457%**
+- Hit rate: **43.6%**
+- t-statistic: **−3.12** (n = 326 days)
+
+A t-stat of −3.12 is not noise. The model is *reliably wrong* out of sample. That is a different and more informative failure than "no signal."
+
+### 6c — Cause: the momentum relationship inverts between train and test
+
+Measured the **cross-sectional Information Coefficient (IC)** of each feature — the per-day Spearman rank correlation between the feature and forward 5-day *relative* return, averaged across days. t-stats computed on every 5th date only, so the 5-day overlapping labels don't inflate significance.
+
+| Feature | IC, train (2020-02 → 2025-04) | IC, test (2025-05 → 2026-08) |
+|---|---|---|
+| `momentum_10` | **+0.0095** | **−0.0422** |
+| `momentum_5` | **+0.0112** | **−0.0290** |
+| `distance_SMA10` | **+0.0077** | **−0.0339** |
+| `RSI` | +0.0185 | −0.0126 |
+| `volatility_5` | +0.0120 | +0.0531 |
+
+Every momentum-family feature **flips sign**. The model learned "recent winners keep winning" from the training period and deployed it into a mean-reverting window — which is exactly the −3.12 t-stat in 6b. Momentum inverting across regimes is normal behaviour in equity markets, not an anomaly.
+
+Checked whether volatility's positive sign is a stable lead. Yearly mean IC for `volatility_5`: `+0.056, −0.011, −0.033, +0.048, +0.015, +0.046, +0.030` (2020→2026). It flips in 2021–22, so it is not stable either. `RSI` is the most consistently-signed feature in the dataset (positive in 6 of 7 years) but at IC ≈ 0.02 with t ≈ 1.5 — below significance, and one of 39 features/period-combinations tested.
+
+### 6d — Three structural problems with the experiment design
+
+**1. The label is mostly market beta.** Measured the correlation between each stock's forward 5-day return and the equal-weight 40-stock market's forward 5-day return: **mean 0.540** (range 0.229–0.751). On **22.5%** of days, ≥80% of the 40 stocks move the same direction. So `target_5d` is largely asking *"will the market go up next week?"* — a question that single-stock technical features cannot answer. A market-timing failure has been getting attributed to a stock-selection feature set. **The cross-sectional relative target (variant D/E) is the correct framing regardless of anything else, because it removes this component.**
+
+**2. Effective sample size is far smaller than the row count.** The panel is 65,400 rows, but: 40 symbols correlated at 0.54 with a common factor, and 5-day overlapping labels (consecutive rows share 4 of 5 days of their target window). Effective independent observations ≈ 1,635 dates ÷ 5 ≈ **327**, times a handful of independent cross-sectional dimensions — order **~1,000, not 65,000**. Any t-stat computed on raw rows is inflated by roughly √5 from label overlap alone. This is why Sirignano-Cont's "one year of pooled data = 500 years of single-stock data" does not transfer here: that holds for order-book data where cross-sectional correlation is low, not for daily returns of 40 mega-caps.
+
+**3. The entire out-of-sample verdict rests on one macro regime.** Test period is a single continuous window, 2025-04-29 → 2026-08-17. Whatever momentum happened to do in those 16 months *is* the result. A single walk-forward split cannot distinguish "no signal" from "signal, wrong regime" — and 6c shows it is the second one.
+
+### 6e — Bugs found
+
+- **`pipeline/panel.py`, `split_by_date()`** — `.loc[:cutoff]` and `.loc[cutoff:]` both include the cutoff date, so one trading day appears in *both* train and test (confirmed: 1 overlapping date). Small, but it is leakage.
+- **No purge/embargo anywhere.** Because the label looks 5 days forward, the last 5 training rows have targets that resolve *inside* the test period. Every split in this project (`TimeSeriesSplit` in Experiments 2b/3/4 included) has this. Adding a 10-day purge moved pooled AUC 0.4950 → 0.4996 — small here, but it is the difference between an honest and a slightly optimistic number, and it matters more as signal gets stronger.
+- **`trade_count` is a symbol fingerprint in the pooled model.** It is fed raw and unnormalized, and its median ranges from 33,372 (LIN) to 1,046,594 (TSLA). The model can identify the ticker from it and memorize per-symbol base rates. Dropping it *lowered* AUC (0.4950 → 0.4917), which suggests it was contributing identity information rather than signal.
+
+### 6g — First test of the regime hypothesis: negative
+
+The obvious follow-up to 6c is: *if momentum's sign depends on the market regime, can we detect the regime in advance and switch signs?* Tested directly, using only backward-looking information available at decision time.
+
+Built two candidate regime states from the panel itself (equal-weight average of all 40 stocks' `daily_return`):
+- `mkt_vol20` — 20-day rolling std of market return (market calm vs. turbulent)
+- `mkt_tren20` — 20-day rolling sum of market return (market rising vs. falling)
+
+Split all days into terciles on each, then measured `momentum_10`'s IC separately inside each tercile:
+
+| Regime variable | Tercile | mean IC | t-stat (non-overlapping) |
+|---|---|---|---|
+| market volatility | LOW | +0.0083 | 0.59 |
+| | MID | −0.0205 | −0.59 |
+| | HIGH | −0.0008 | −0.09 |
+| market trend | LOW (falling) | −0.0311 | −1.28 |
+| | MID | +0.0117 | 0.66 |
+| | HIGH (rising) | +0.0065 | −0.69 |
+
+**No tercile reaches significance** (all |t| < 1.3), and the ordering is not monotonic — under the volatility split the middle bucket is the most negative, which is not what a real regime effect looks like. **The simplest version of the regime hypothesis does not hold in this data.**
+
+This does not kill the idea outright — 20-day realized vol/trend are crude regime proxies, and the tercile split throws away information — but it does mean the momentum sign-flip in 6c is *not* cheaply exploitable, and the regime direction should be demoted from "most promising next step" to "tested once, negative, needs a much better regime definition to be worth revisiting."
+
+### 6f — Interpretation
+
+The pooled model's 0.498 AUC is not "the features are useless." It is three things stacked: (a) the target is 54% market beta that these features cannot explain, (b) the momentum signal that does exist inverted between train and test, and (c) the evaluation has ~1,000 effective observations, not 65,000, so nothing at this effect size could have been proven either way.
+
+This reframes the "next steps" from Experiment 5. Adding sector embeddings or hierarchical structure to a model whose *label* is dominated by an unexplainable market factor is optimizing the wrong stage. The evaluation framing has to be fixed first.
+
+---
+
 ## Running Synthesis (as of last entry)
 
-The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness). The honest conclusion at this stage: **AAPL-specific patterns (`A+D`) do not generalize; `B+D` shows a partial, sector-limited pattern (KO/XOM) that is the best lead so far but far from a robust cross-market signal.**
+The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).
 
-**Next steps under consideration:**
-- Investigate `B+D`'s KO/XOM-specific consistency further — is there a sector-level (defensive/traditional vs. tech/growth) explanation, or is 2/5 still within the range of chance given multiple testing?
-- Test whether ensembling separately-trained models (rather than concatenating features into one model) produces a more robust combined signal.
-- Group E (market context, e.g. SPY) from the plan remains untried and is a genuinely new information source.
-- Alternatively, treat "no robust cross-stock signal from price/volume technicals alone" as the project's current, legitimate Phase 2 finding, and pivot toward either a different feature source (Group E) or a different, more tolerant research question (e.g., per-symbol tuned models rather than one general model).
+**Honest conclusion at this stage:**
+
+1. **AAPL-specific patterns (`A+D`) do not generalize.** `B+D` shows a partial, sector-limited pattern (KO/XOM) that is most likely multiple-testing noise.
+2. **Plain pooling across 40 stocks solved the overfitting problem** (train/test gap 0.13–0.26 → 0.068), confirming Sirignano-Cont's mechanism in our own data. This is a real, positive result.
+3. **Pooling did not produce signal**, and Experiment 6 explains why: the target is ~54% common market movement that single-stock technicals cannot explain, and the momentum relationship that does exist **inverted** between the train and test periods (IC +0.010 → −0.042), making the model reliably *wrong* rather than merely random (long/short t-stat −3.12).
+4. **The evaluation, not just the model, is the bottleneck.** Effective sample size is ~1,000, not 65,000. The out-of-sample verdict rests on a single 16-month macro regime. No result at this effect size could have been proven either way with this design.
+
+**Revised next steps, in priority order:**
+
+1. **Change the evaluation metric from accuracy/AUC to cross-sectional IC and long/short quintile spread.** AUC on a 54%-base-rate pooled panel barely distinguishes a useful model from a useless one, and cannot say whether a strategy would make money. A *stable* IC of 0.03 is a real, tradeable factor — results at that magnitude have been getting discarded in this project because "0.52 AUC looks like nothing." It is not nothing, but it only counts if it is stable, which is what needs measuring.
+2. **Fix the validation before running any new model.** Purged walk-forward with a 5-day embargo, and *multiple* sequential test windows instead of one. Fix the `split_by_date()` boundary-overlap bug and normalize or drop `trade_count`.
+3. **Adopt the cross-sectional relative target as the default framing** (predict "does this stock beat the median stock this week", not "does this stock go up"), which removes the unexplainable market-beta component from the label.
+4. **The regime hypothesis has been tested once and came back negative (6g).** Conditioning `momentum_10`'s IC on 20-day market volatility or 20-day market trend produced no significant bucket (all |t| < 1.3) and no monotonic ordering. Revisit only with a substantially better regime definition; do not treat it as the obvious next step.
+5. **Group E (market context, e.g. SPY) remains untried**, but 6g lowers the expected value of using it purely as a regime-conditioning variable. Its value now rests on whether it adds information the 40-stock panel average does not already contain.
+6. **Add stock/sector structure (Döbelt-style embeddings, hierarchical priors) only after steps 1–4.** Adding model structure on top of a mis-specified label and an under-powered evaluation optimizes the wrong stage.
+
+**A standing caveat worth keeping in view:** 13 technical features derived from daily OHLCV on 40 US mega-caps is among the most heavily mined datasets in finance. The prior probability that a stable, exploitable edge is sitting there undiscovered is low. The negative result this project has produced is the *expected* result, and it is more valuable than an unreproducible 0.58 AUC. The genuinely open questions are the regime-conditioning one (step 4), or whether an orthogonal information source (fundamentals, cross-asset, news/sentiment) is needed rather than a better model on the same 13 columns.
+
+---
+
+## Glossary (for readers new to quant ML)
+
+- **ROC-AUC** — probability the model scores a randomly chosen "up" day higher than a randomly chosen "down" day. 0.5 = coin flip, 1.0 = perfect. Below 0.5 means the model is *backwards*.
+- **IC (Information Coefficient)** — the standard signal-strength metric in quant finance. Each day, rank all stocks by a feature, rank them by what actually happened next, and correlate the two rankings (Spearman). Then average over all days. IC ≈ 0.00 = no information; **IC ≈ 0.02–0.05, if stable, is a genuinely tradeable factor.** It is preferred over accuracy/AUC because it measures *ranking* skill, which is what a long/short portfolio actually needs.
+- **Cross-sectional** — comparing stocks *against each other on the same day*, rather than comparing one stock against its own past. "Which of today's 40 stocks will do best" instead of "will AAPL go up."
+- **Market beta / common factor** — the portion of a stock's move that is just the whole market moving. Measured here at ~54% of the 5-day return.
+- **Purge / embargo** — deleting training rows whose forward-looking label overlaps the test period. Without it, the model has seen a sliver of the future.
+- **Effective sample size** — how many *genuinely independent* observations there are. Overlapping labels and correlated stocks mean 65,400 rows can carry only ~1,000 observations' worth of evidence.
+- **Long/short quintile spread** — buy the top 20% the model likes, short-sell the bottom 20%, measure the return difference. The most direct "would this have made money" test.
+- **t-statistic** — how many standard errors a result sits from zero. |t| > 2 is the usual "probably not luck" bar. Negative t means reliably wrong.
+- **Regime** — a persistent market environment (trending vs. mean-reverting, calm vs. volatile). Relationships that hold in one regime routinely invert in another.

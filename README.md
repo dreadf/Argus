@@ -1,4 +1,4 @@
-# Stock Direction Prediction — 5-Day AAPL/MSFT/JPM/KO/XOM Experiment
+# Stock Direction Prediction — 5-Day Multi-Stock Experiment (40 US large-caps)
 
 A learning-first, experiment-driven ML pipeline built for the **Alpaca AI Trading Agents Hackathon**, investigating a narrow research question:
 
@@ -9,7 +9,13 @@ Full experiment log (what was tried, why, results, interpretation): [`EXPERIMENT
 
 ## Key finding so far
 
-Across a naive baseline, Logistic Regression, XGBoost, single-symbol feature ablation, and a multi-symbol generalization check (AAPL, MSFT, JPM, KO, XOM), **no feature combination tested shows a robust, cross-stock predictive edge** for 5-day direction. A promising-looking result on AAPL alone (`price/return + volume` features) did not replicate on other symbols. The closest thing to a repeatable pattern (`trend/technical + volume` features) only held up on 2 of 5 stocks (KO, XOM). See [`EXPERIMENT.md`](EXPERIMENT.md) for full detail, including the diagnostic process (leakage checks, chronological validation, overfitting checks, cross-validation, multiple-testing caveats).
+Across a naive baseline, Logistic Regression, XGBoost, single-symbol feature ablation, a multi-symbol generalization check, a 40-stock pooled panel model, and a panel diagnostic pass, **no feature combination tested shows a robust, cross-stock predictive edge** for 5-day direction. Three results are worth singling out:
+
+- **Pooling works — for the problem it was meant to solve.** Stacking 40 stocks into one panel cut the train/test overfitting gap from 0.13–0.26 down to **0.068**, confirming the mechanism Sirignano-Cont (2019) describe. It did not, however, move accuracy past chance (ROC-AUC 0.498).
+- **The model is not random, it is inverted.** A long/short book built from the pooled model returns **−0.457% per 5 days (t = −3.12)** out of sample. The cause: every momentum feature's cross-sectional IC **flips sign** between the training period (`momentum_10`: +0.010) and the test period (−0.042). The model learned "winners keep winning" and was deployed into a mean-reverting regime.
+- **The evaluation was the bottleneck, not just the model.** The target is ~54% common market movement that single-stock technicals cannot explain, and with 5-day overlapping labels across correlated stocks the effective sample size is **~1,000, not 65,000**.
+
+See [`EXPERIMENT.md`](EXPERIMENT.md) for full detail, including the diagnostic process (leakage checks, chronological validation, overfitting checks, cross-validation, multiple-testing caveats) and a **glossary** of the quant/ML terms used.
 
 ## Setup
 
@@ -58,6 +64,8 @@ pipeline/
     xgb_model.py             # single-split XGBoost
     xgb_stability.py         # XGBoost with TimeSeriesSplit cross-validation
     xgb_group_feature.py     # feature-group ablation sweep (all combinations)
+    pooled_xgb_model.py      # pooled/panel XGBoost across all symbols at once
+  panel.py                # builds the stacked multi-symbol panel + date-based split
 output/
   data/                   # raw + engineered per-symbol datasets (gitignored)
   model/                  # multi-stock comparison result tables

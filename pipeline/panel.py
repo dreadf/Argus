@@ -22,8 +22,8 @@ def split_by_date(panel_df, train_percentage):
     train = []
     test= []
     for s in panel_df['symbol'].unique():
-        tmp_train = panel_df[panel_df['symbol'] == s].loc[:cutoff_date]
-        tmp_test = panel_df[panel_df['symbol'] == s].loc[cutoff_date:]
+        tmp_train = panel_df[panel_df['symbol'] == s].loc[:cutoff_date - pd.Timedelta(days=7)]
+        tmp_test = panel_df[panel_df['symbol'] == s].loc[cutoff_date + pd.Timedelta(days=1):]
         train.append(tmp_train)
         test.append(tmp_test)
 
@@ -38,6 +38,8 @@ def get_x_y (df, feature, target):
     y = df[target]
 
     return x, y
+
+# Calculates 
 
 if __name__ == '__main__':
     panel = build_panel_data(SYMBOLS)
