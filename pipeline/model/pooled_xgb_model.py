@@ -1,20 +1,30 @@
 from sklearn import metrics
 from xgboost import XGBClassifier
 
-from pipeline.panel import build_panel_data, split_by_date, get_x_y
-from pipeline.config import SYMBOLS
+from pipeline.panel import build_panel_data, split_by_date, get_x_y, add_relative_target, add_market_features
+from pipeline.config import SYMBOLS, MARKET_SYMBOL
 import pandas as pd
 
 
 def run_pooled_xgb():
     # Take the universal data using the functions from panel.py
     panel_data = build_panel_data(SYMBOLS)
+    panel_data = add_market_features(panel_data, MARKET_SYMBOL)
+    panel_data = add_relative_target(panel_data)
     train_df, test_df = split_by_date(panel_data, 0.8)
 
     # Separate features (x) and target (y)
-    exclude = ['symbol', 'target_5d', 'fwd_5d_return', 'close', 'high', 'open', 'low', 'timestamp', 'volume', 'vwap', 'SMA_10', 'SMA_30']
+    # Raw market columns (*_mkt) are excluded on purpose -- see the docstring on
+    # add_market_features() in panel.py for why (they're near-constant per date,
+    # and collinear with the residual_momentum_* columns derived from them).
+    exclude = [
+        'market_median_return', 'relative_target', 'symbol', 'target_5d', 'fwd_5d_return',
+        'close', 'high', 'open', 'low', 'timestamp', 'volume', 'vwap', 'SMA_10', 'SMA_30',
+        'daily_return_mkt', 'momentum_5_mkt', 'momentum_10_mkt', 'momentum_20_mkt',
+        'volatility_5_mkt', 'volatility_10_mkt', 'RSI_mkt',
+    ]
     feature_columns=[col for col in panel_data.columns if col not in exclude]
-    target_columns=['target_5d']
+    target_columns=['relative_target']
 
     x_test, y_test = get_x_y(test_df, feature_columns, target_columns)
     x_train, y_train = get_x_y(train_df, feature_columns, target_columns)

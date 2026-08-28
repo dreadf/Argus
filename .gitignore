@@ -6,3 +6,4 @@ output/data/*.csv
 *.md
 !README.md
 !EXPERIMENT.md
+.claude/

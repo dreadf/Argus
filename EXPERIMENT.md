@@ -291,6 +291,59 @@ This reframes the "next steps" from Experiment 5. Adding sector embeddings or hi
 
 ---
 
+## Experiment 7 — Relative Target Integrated into the Pooled Pipeline
+
+**Scripts:** `pipeline/panel.py` (`add_relative_target()`, new) and `pipeline/model/pooled_xgb_model.py` (updated to train on `relative_target` instead of `target_5d`).
+
+**What we did:** Codified the cross-sectional relative target that Experiment 6 recommended as a diagnostic fix. `add_relative_target(panel_df)` computes, per date, the cross-sectional median of `fwd_5d_return` across all 40 symbols (`panel_df.groupby(panel_df.index)['fwd_5d_return'].transform('median')`) and labels each row `1` if its `fwd_5d_return` beats that day's median, `0` otherwise — so `relative_target` is 50/50 by construction, every day. Wired into `run_pooled_xgb()`: called right after `build_panel_data()` and before `split_by_date()`, with `relative_target` and `market_median_return` both added to the feature-exclusion list (the latter is derived from `fwd_5d_return`, so leaving it in as a feature would be leakage). Also fixed, in the same session, the `split_by_date()` boundary-overlap bug flagged in Experiment 6e — the cutoff now gets a 7-day gap (`cutoff_date - Timedelta(7d)` for train end, `cutoff_date + Timedelta(1d)` for test start) instead of both sides including the cutoff date.
+
+**Why:** Experiment 6d measured that ~54% of `target_5d`'s variance is common market movement, unexplainable by single-stock technicals. The relative target removes that component from the label, isolating the question "can these features rank stocks against each other" from "can these features predict market direction" (which they were never expected to answer).
+
+**Results:**
+
+| | Experiment 5 (`target_5d`, no purge) | Experiment 7 (`relative_target`, 7-day purge) |
+|---|---|---|
+| Test Accuracy | 0.527 | 0.500 (baseline is also 0.500 — relative target is 50/50 by construction, so this number alone is uninformative) |
+| Test ROC-AUC | 0.498 | **0.497** |
+| Train − Test Gap | 0.068 | 0.099 |
+
+**Interpretation:** AUC is unchanged within noise (0.498 → 0.497) — the relative target did **not** recover any signal. This is not a new finding; it corroborates Experiment 6a's variant D (relative target alone, AUC 0.4973) and variant E (relative target + ranked features, AUC 0.4985), which already showed this. Combined with 6c's diagnosis (the momentum features' cross-sectional IC inverts sign between train and test, +0.0095 → −0.0422), the picture is consistent: removing market beta from the label was necessary but not sufficient, because the remaining signal problem is in the *features'* stability across this test period, not in what the label was measuring. Accuracy alone (0.500) is not meaningful here and must not be compared directly to Experiment 5's 0.527 — the two targets have different baselines (54.4% vs 50.0%), so only AUC is comparable across them.
+
+**Against the Phase 3 gating criteria** (`Project_Context_and_Plan_Updated.md`): AUC 0.497 does not clear "IC positive and stable across multiple walk-forward windows." Per that gate, the honest conclusion is **do not proceed to live/paper execution** with this feature set — this is a valid research result, not a blocked task.
+
+---
+
+## Experiment 8 — Market-Relative Features (Residual Momentum & Rolling Beta)
+
+**Scripts:** `pipeline/panel.py` (`add_market_features()`, new) and `pipeline/model/pooled_xgb_model.py` (wired in between `build_panel_data()` and `add_relative_target()`). `config.py` gained `MARKET_SYMBOL = "SPY"`, kept separate from `SYMBOLS` so SPY never becomes a tradeable candidate. `raw_SPY.csv`/`engineered_SPY.csv` generated via the existing `fetch_and_save()`/`engineer_features()` functions, unmodified.
+
+**Research check (done before implementing, per standing project rule):** Blitz, Huij & Martens (2011, *Journal of Empirical Finance*), "Residual Momentum" — sorting stocks by momentum net of the market component produces a materially more stable signal than sorting by raw momentum. Blitz, Hanauer & Vidojevic (2017), "The Idiosyncratic Momentum Anomaly" — idiosyncratic momentum is not explained by market/size/value/profitability/investment factors and subsumes total-return momentum in several tests (not vice versa). Gu, Kelly & Xiu (2020) — already cited in `RESEARCH_pooling_vs_individual.md` — include market beta among their 94 standard cross-sectional characteristics. This directly targets Experiment 6c's diagnosis (`momentum_10` IC flipped +0.0095 → −0.0422 between train and test): residual/idiosyncratic momentum is the literature's specific answer to a momentum signal that inverts against the market factor.
+
+**What we did:** `add_market_features(panel_df, market_symbol)` joins SPY's engineered columns (`daily_return`, `momentum_5/10/20`, `volatility_5/10`, `RSI`, suffixed `_mkt`) onto every stock's row for the matching date (`DataFrame.join` on the shared `timestamp` index — one market value broadcast to all 40 symbols per date, not a new row). From that, two feature families are derived:
+- **Residual momentum** (`residual_momentum_5/10/20`) = `momentum_N − momentum_N_mkt` — the part of a stock's move not explained by the market that day.
+- **Rolling beta** (`beta_60`) = 60-day rolling `cov(daily_return, daily_return_mkt) / var(daily_return_mkt)`, computed per symbol.
+
+Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set: on any given date they take one value shared by all 40 symbols, so for a cross-sectional/relative target they carry ~zero information on their own, and keeping them alongside the residual features (which are a linear function of them) would reintroduce the multicollinearity Experiment 1 already found and removed (raw `SMA_10`/`SMA_30` vs `distance_SMA`).
+
+**Sanity checks:** row count dropped exactly 65,400 → 63,040 (2,360 = 59 warm-up rows × 40 symbols, matching the 60-day beta window — no unexplained loss). `beta_60` mean 0.849, std 0.618, range roughly [−4.3, 3.9] — centered near 1 as expected for a basket of large caps. `residual_momentum_10` std (0.0648) is modestly lower than raw `momentum_10` std (0.0704), directionally consistent with the "more stable" claim in Blitz et al., though the difference is small in this sample.
+
+**Results:**
+
+| | Experiment 7 (`relative_target`, no market features) | Experiment 8 (`relative_target` + market features) |
+|---|---|---|
+| Test Accuracy | 0.500 (baseline 0.500) | 0.504 (baseline 0.500) |
+| Test ROC-AUC | 0.497 | **0.502** |
+| Train − Test Gap | 0.099 | 0.112 |
+| Feature count | 13 | 17 |
+
+**Feature importance (Experiment 8 model):** fairly flat across all 17 features (0.050–0.066 range, no standout). Notably, `residual_momentum_20` is the single most important feature (0.066), and `beta_60` (0.061) sits mid-pack alongside established features like `RSI` and `distance_SMA10` — both new feature families are being used by the model, not ignored.
+
+**Interpretation:** AUC moved from 0.497 to 0.502 — technically crossed back above 0.50, but the move is small enough (0.005) to be well within single-split noise given the effective sample size problem established in Experiment 6d (~1,000 independent observations, not 63,040 rows). This is **not** strong enough evidence on its own to call it a recovered edge. It is, however, a directionally consistent result: the literature-motivated residual momentum feature is the top-ranked feature by importance, which is more informative than the AUC delta alone. Per the Phase 3 gating criteria (`Project_Context_and_Plan_Updated.md`), this result still does not clear "IC positive and stable across multiple walk-forward windows" — one split, one small AUC move, is not sufficient. The honest read: market-relative features are a legitimate, literature-backed idea that measurably changed what the model leans on (see feature importances), but a single-split AUC of 0.502 is not yet a validated edge.
+
+**Next step implied:** re-run this under `TimeSeriesSplit`/multiple walk-forward windows (as Experiment 2b did for the original single-symbol XGBoost result) before drawing any conclusion about whether this 0.502 is real or a favorable slice of time — the project has been burned by exactly this pattern once already (Experiment 2's single-split 0.580 AUC did not survive Experiment 2b's multi-window check).
+
+---
+
 ## Running Synthesis (as of last entry)
 
 The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).
