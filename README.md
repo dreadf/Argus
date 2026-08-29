@@ -6,6 +6,7 @@ A learning-first, experiment-driven ML pipeline built for the **Alpaca AI Tradin
 
 Full research plan and philosophy: [`Project_Context_and_Plan_Updated.md`](Project_Context_and_Plan_Updated.md) and [`ML_Experiment_Plan.md`](ML_Experiment_Plan.md).
 Full experiment log (what was tried, why, results, interpretation): [`EXPERIMENT.md`](EXPERIMENT.md).
+Trading-system foundation (what gets built downstream of the model, and why it can be built in parallel): [`TRADING_SYSTEM_PLAN.md`](TRADING_SYSTEM_PLAN.md).
 
 ## Key finding so far
 

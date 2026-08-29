@@ -344,6 +344,34 @@ Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set
 
 ---
 
+## Experiment 9 — News Count Feature
+
+**Scripts:** `pipeline/news_extract.py` (new — fetches raw news articles from Alpaca's News API) and `pipeline/panel.py` (`add_news_features()`, new), wired into `pooled_xgb_model.py` between `add_market_features()` and `add_relative_target()`.
+
+**Research check (done before implementing, per standing project rule):** literature on news volume as a market signal finds it is a stronger predictor of *volatility/tail risk* than of *direction* — "abnormally high news coverage predicts tail risk on both sides," and retail attention to news is linked to volatility increases up to 4 days after an event. Separately, "News versus Sentiment" (Financial Analysts Journal, ~900k articles) found daily-granularity news predicts returns only 1-2 days out, while weekly-aggregated news predicts up to a quarter — closer to this project's 5-day horizon. Expectation set going in: `news_count` more plausible as a risk/regime signal than a directional one.
+
+**What we did:** `fetch_news()` in `news_extract.py` pulls articles per symbol via Alpaca's `NewsClient`, chunked into quarterly date ranges (discovered mid-build: `get_news()` paginates internally and `limit` caps the *total* articles returned per call at ~10,000, not "per page" — a single call for one heavily-covered symbol across the full 2020-2026 range would silently truncate). Retries 3x with backoff per chunk, checkpoints to CSV per symbol. `add_news_features()` in `panel.py` explodes each article's `symbols` list into one row per mentioned symbol, aggregates to a daily `news_count` per (symbol, date) via `groupby(...).size()`, and merges onto the panel on `['symbol', 'timestamp']` (both keys, unlike the market-feature join which only needs date) with `fillna(0)` for no-news days.
+
+**Bug found and fixed:** because articles are fetched one symbol at a time, an article mentioning multiple tracked symbols (e.g. an article about both `CAT` and `PEP`) gets pulled down once per symbol it's relevant to and stored as duplicate rows. **43% of the raw 223,597 fetched rows (96,286) were duplicates** of this kind. Left unfixed, `explode()` would double- or multi-count `news_count` specifically for symbols that frequently co-occur in the same articles — a systematic bias, not random noise. Fixed with `drop_duplicates(subset=['created_at', 'headline'])` *before* exploding (deduping after exploding doesn't work, since the `symbol` column differs per exploded row by design). Note: dedup key is `created_at`+`headline`, not Alpaca's article `id` — `fetch_news()` doesn't currently save `id`. Practically safe (two distinct articles sharing an identical to-the-second timestamp and headline is effectively impossible), but worth fixing at the source if `news_extract.py` is ever re-run.
+
+**Coverage is extremely uneven across symbols** (raw article counts, full 2020-2026 period): `TSLA` 32,234, `AAPL` 23,244, `NVDA` 18,878 vs. `LIN` 592, `AMT` 696, `DUK` 692 — a ~50x spread between the most- and least-covered names, all mega-caps. `news_count` on the full panel: mean 3.23, median 1, max 159, with 25th percentile at 0 (a quarter of all stock-days have zero news).
+
+**Results:**
+
+| | Experiment 8 (17 features, no news) | Experiment 9 (18 features, +`news_count`) |
+|---|---|---|
+| Test Accuracy | 0.5044 (baseline 0.5000) | 0.5025 (baseline 0.5000) |
+| Test ROC-AUC | 0.5018 | **0.5088** |
+| Train − Test Gap | 0.1124 | 0.1128 |
+
+**Feature importance (Experiment 9 model):** `news_count` is the **least important feature of all 18** (0.0427, tied for lowest with `daily_return`). Full ranking top-to-bottom: `distance_SMA30`, `momentum_20`, `ATR_10`, `residual_momentum_20`, `RSI`, `beta_60`, `volatility_5`, `volatility_10`, `residual_momentum_10`, `distance_SMA10`, `trade_count`, `residual_momentum_5`, `momentum_5`, `ATR_5`, `momentum_10`, `volume_spike`, `daily_return`, `news_count`.
+
+**Interpretation:** AUC moved up again (0.5018 → 0.5088), continuing the small-step pattern from Experiment 8. But this time the evidence argues *against* attributing the move to the new feature: `news_count` is the single least-used feature in the model. A feature the model barely splits on cannot plausibly be responsible for a 0.007 AUC change — the more likely explanation is retraining noise (adding any feature, even a weak one, perturbs XGBoost's greedy split search slightly). This is a stronger version of the caution already applied in Experiment 8: there, the new features at least ranked among the more important ones; here, the new feature is demonstrably the least relevant one, which undercuts the AUC move even further. Per the Phase 3 gating criteria, this still does not clear "IC positive and stable across multiple walk-forward windows" — if anything, `news_count` in its current raw form (simple daily article count, no sentiment, no decay weighting, uneven coverage across symbols) looks like a feature with little to contribute to this model, consistent with the research check's expectation that news *count* alone is a weaker directional signal than a risk/volatility one.
+
+**Next step implied:** per `TRADING_SYSTEM_PLAN.md` Layer 1 (not yet built), re-measure this and Experiment 8 using cross-sectional IC with non-overlapping t-stats instead of AUC — AUC deltas at this magnitude (0.005-0.007) are not distinguishable from noise given the ~1,000 effective-observation ceiling established in Experiment 6d, and IC/quintile-spread analytics were built specifically to answer this class of question more decisively.
+
+---
+
 ## Running Synthesis (as of last entry)
 
 The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).

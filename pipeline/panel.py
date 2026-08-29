@@ -1,3 +1,4 @@
+import ast
 import numpy as np
 import pandas as pd
 from pipeline.config import SYMBOLS
@@ -63,7 +64,7 @@ def add_market_features(panel_df, market_symbol, beta_window=60):
 
     # Rolling beta: cov(stock return, market return) / var(market return), per symbol.
     # This function answers "How sensitive is this stock compare to the market in a 60 day window"
-    def _rolling_beta(group):
+    def rolling_beta(group):
         # Covariance(cov): Measures whether these two things actually moves together (correlates or no)
         cov = group['daily_return'].rolling(beta_window).cov(group['daily_return_mkt'])
         # Variance(var): Measures how fluctuative is the market in a 60 day window
@@ -72,12 +73,56 @@ def add_market_features(panel_df, market_symbol, beta_window=60):
         return cov / var
 
     panel_df = panel_df.reset_index()
-    panel_df[f'beta_{beta_window}'] = panel_df.groupby('symbol', group_keys=False).apply(_rolling_beta)
+    panel_df[f'beta_{beta_window}'] = panel_df.groupby('symbol', group_keys=False).apply(rolling_beta)
     panel_df = panel_df.set_index('timestamp')
 
     # Drop the warm-up rows the rolling beta introduces (same pattern as transform.py's dropna)
     panel_df = panel_df.dropna()
 
+    return panel_df
+
+# Adds a daily news_count feature per symbol, from the raw news articles fetched
+# by pipeline/news_extract.py. Unlike add_market_features() above, this joins on symbol AND date together,
+# because each stock has its own news count.
+def add_news_features(panel_df, news_path='output/data/raw_news.csv'):
+    news_df = pd.read_csv(news_path)
+
+    # news_extract.py fetches one symbol at a time, so an article mentioning
+    # multiple tracked symbols (e.g. ['CAT', 'PEP']) gets pulled down once per
+    # symbol it's relevant
+    # We drop duplicates using this line
+    news_df = news_df.drop_duplicates(subset=['created_at', 'headline'])
+
+    # 'symbols' comes back from CSV as a literal string like "['AAPL', 'MSFT']"
+    # ast.literal_eval turns that string back into
+    # a real list so explode() can split it into one row per symbol.
+    news_df['symbols'] = news_df['symbols'].apply(ast.literal_eval)
+    news_df = news_df.explode('symbols').rename(columns={'symbols': 'symbol'})
+
+    # We only care about the calendar date, not the exact publish time.
+    # normalize() zeroes out the time-of-day so multiple articles on the same
+    # day collapse to the same key when we group.
+    news_df['timestamp'] = pd.to_datetime(news_df['created_at'], utc=True).dt.normalize()
+
+    news_counts = (
+        news_df.groupby(['symbol', 'timestamp'])
+        .size()
+        .rename('news_count')
+        .reset_index()
+    )
+
+    # panel_df's index (timestamps from the price data) also needs to be reduced
+    # to just the calendar date, so it lines up with news_counts' date-only key.
+    panel_df = panel_df.reset_index()
+    panel_df['timestamp'] = panel_df['timestamp'].dt.normalize()
+
+    panel_df = panel_df.merge(news_counts, on=['symbol', 'timestamp'], how='left')
+
+    # A missing match means zero articles that day, NOT missing data, must
+    # fillna BEFORE any dropna() elsewhere in the pipeline treats it as one.
+    panel_df['news_count'] = panel_df['news_count'].fillna(0)
+
+    panel_df = panel_df.set_index('timestamp')
     return panel_df
 
 if __name__ == '__main__':

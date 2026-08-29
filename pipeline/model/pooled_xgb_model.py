@@ -1,7 +1,7 @@
 from sklearn import metrics
 from xgboost import XGBClassifier
 
-from pipeline.panel import build_panel_data, split_by_date, get_x_y, add_relative_target, add_market_features
+from pipeline.panel import build_panel_data, split_by_date, get_x_y, add_relative_target, add_market_features, add_news_features
 from pipeline.config import SYMBOLS, MARKET_SYMBOL
 import pandas as pd
 
@@ -10,6 +10,7 @@ def run_pooled_xgb():
     # Take the universal data using the functions from panel.py
     panel_data = build_panel_data(SYMBOLS)
     panel_data = add_market_features(panel_data, MARKET_SYMBOL)
+    panel_data = add_news_features(panel_data)
     panel_data = add_relative_target(panel_data)
     train_df, test_df = split_by_date(panel_data, 0.8)
 
@@ -32,7 +33,7 @@ def run_pooled_xgb():
     # Training the model
     model = XGBClassifier(
         n_estimators=100, 
-        max_depth=4, 
+        max_depth=3, 
         subsample=0.8,  
         learning_rate=0.1, 
     )
