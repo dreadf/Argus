@@ -3,7 +3,17 @@ venv/
 __pycache__/
 .DS_Store
 output/data/*.csv
+.claude/
+
+# Markdown is ignored by default, with the project documents allowed through.
+# The research story is the differentiator, so these must be visible in the public repo.
 *.md
 !README.md
 !EXPERIMENT.md
-.claude/
+!OPTIONS_SYSTEM_PLAN.md
+!VOLATILITY_ML_PLAN.md
+!PROGRESS.md
+!TRADING_SYSTEM_PLAN.md
+!Project_Context_and_Plan_Updated.md
+!ML_Experiment_Plan.md
+!RESEARCH_pooling_vs_individual.md
