@@ -91,12 +91,13 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 ## Verification drills (Part 8)
 - [ ] Dry run end to end sends nothing
 - [ ] Run twice, second run submits nothing
-- [ ] Partial fill drill
-- [ ] Reconcile drill
-- [ ] Pin risk drill
-- [ ] Public deploy safety drill, controls absent
-- [ ] Cold open drill, renders with zero positions
-- [ ] Secrets drill, no keys in repo or page source
+- [ ] Partial fill drill (needs `recovery.py`, not built)
+- [ ] Reconcile drill (needs `reconcile.py`, not built)
+- [x] Pin risk / expiry-rule drill -- `monitor.py` self-check confirms a position one day from expiry closes unconditionally, overriding even an unmet profit target; DTE<=1 catches both "day before" and "on expiry day" (0 DTE)
+- [ ] Public deploy safety drill, controls absent (pending your Streamlit deploy)
+- [x] Cold open drill, renders with zero positions -- run locally (file missing, HTTP 200, no exceptions); pending re-verification on the actual deployed URL
+- [x] Secrets drill (repo half) -- `git grep` across the tracked repo for key-shaped strings and hardcoded assignments: none found; `.env` confirmed untracked. Page-source half pending your Streamlit deploy.
+- [x] **False-trip test** (Part 6, not originally numbered in Part 8's list but the same discipline) -- `pipeline/risk/false_trip.py`. Found Guard #8 (credit/width band) blocked 42-50% of real winning weeks even after the Step 6 fix to 0.04, because the weekly ratio at 3%/$1-$5 has far more variance (std 0.059) than the mean (0.067) suggested. Lowered the floor to 0.0 per Part 6's own instruction to loosen or drop a guard that fails this test; re-verified at 0-1.6% blocked. Guard #12 (volatility regime) passed on first measurement (5.7% blocked, well under the 30% bar). The other 8 guards are not testable against this backtest at all (no historical OI/spread/greeks/account-state data) and remain on structural grounds per Part 9B.
 
 ---
 

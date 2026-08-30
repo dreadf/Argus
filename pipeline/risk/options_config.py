@@ -13,15 +13,24 @@ NET_DELTA_CAP_SHARE_EQUIV = 150    # Guard #7, ~$115k notional at $769 spot
 
 
 # Guard #8: credit/width sanity band. The plan's original 0.08 floor was a
-# judgment call (Part 9B: "chosen", not measured) and, checked against the
-# real Experiment 11 backtest, would have blocked EVERY (distance, width)
-# cell the evidence gate actually approved -- the 3% distance survivors
-# measure 0.055 to 0.068 credit/width, all below 0.08. Lowered to 0.04, well
-# under the measured survivors, so this guard still catches a clearly broken
-# quote (near-zero credit) without relitigating what the evidence gate
-# already approved on stronger statistical grounds.
-CREDIT_WIDTH_MIN = 0.04
-CREDIT_WIDTH_MAX = 0.35            # Guard #8: above this, too close (negative-premium zone)
+# judgment call (Part 9B: "chosen", not measured). First fix: lowered to
+# 0.04 after confirming it would otherwise block every cell the evidence
+# gate approved (3% distance survivors AVERAGE 0.055-0.068 credit/width).
+#
+# The false-trip test (pipeline/risk/false_trip.py) then found that even
+# 0.04 was still wrong: the WEEKLY ratio at these survivors has enormous
+# variance (mean 0.067, std 0.059, range -0.02 to 0.37 at 3%/$1) because a
+# $1-wide, 3%-OTM spread often prices in single pennies. A static floor
+# meaningfully above zero blocks 42-50% of real winning weeks -- far above
+# the plan's own 30% false-trip bar. Per Part 6's own instruction ("a guard
+# that blocks 40% of winners... should be loosened or dropped"), the floor
+# is set to 0.0: it still catches a genuinely broken quote (negative or
+# zero credit), while the real economic screening -- which distances/widths
+# are worth trading at all, and how much can be lost -- is already done by
+# the evidence gate and the per-trade/crash-day dollar caps, not by this
+# guard re-litigating each week's ratio.
+CREDIT_WIDTH_MIN = 0.0
+CREDIT_WIDTH_MAX = 0.35            # Guard #8: above this, too close (negative-premium zone); false-trip tested, 1/123 blocked
 
 MIN_DTE = 7                        # Guard #9
 MAX_DTE = 11                       # Guard #9
