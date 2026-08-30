@@ -3,6 +3,7 @@ venv/
 __pycache__/
 .DS_Store
 output/data/*.csv
+output/audit/*.jsonl
 .claude/
 
 # Markdown is ignored by default, with the project documents allowed through.

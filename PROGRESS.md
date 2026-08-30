@@ -46,7 +46,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `risk/options_config.py` -- found and fixed a real inconsistency while wiring it up: the plan's Guard #8 credit/width floor (0.08, a judgment call per Part 9B) would have blocked **every** cell the Experiment 11 evidence gate approved (the 3% distance survivors measure 0.055-0.068 credit/width). Lowered to 0.04.
 - [x] `risk/guards.py` (14 guards) -- pure functions on plain dicts, unit-tested against fake account states: clean proposal passes all 14; exactly at the 5%/8% drawdown lines blocks, one dollar under passes; at the 4-position cap blocks; IV=None blocks on data-sanity grounds.
 - [x] `options/selector.py` (9 picker rules) -- resolved the tie-break the plan left open (three cells cleared the evidence gate at 3% distance): picks the highest cushion_se, not the highest P&L, decided in advance rather than after seeing which paid more. Ran live end to end: picked 3%/$1 width, real strikes $746/$745 (2026-09-09 expiry), credit $7.00/contract, sized 32 contracts -- then correctly **blocked by the liquidity guard** (real open interest on the $746 strike is 22, far below the 500 minimum). The system declining a real trade it can't defend is the design working, not a bug.
-- [ ] `audit/log.py` schema first
+- [x] `audit/log.py` schema first -- append-only JSONL, 21 fixed fields, unknown fields rejected loudly (schema drift must be a deliberate edit, not a typo). Self-checks: missing log file reads back as an empty but correctly-shaped DataFrame (cold-open requirement), append creates the file/dir, two entries append in order rather than overwriting.
 - [ ] `execution/broker.py` + `orders.py`, dry run default
 
 ### 10-12. Manage and show
