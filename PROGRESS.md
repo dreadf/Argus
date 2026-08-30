@@ -22,12 +22,12 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] Committed (8227f43, c0e517e)
 
 ### 1. Accounts and access
-- [ ] New dedicated Alpaca paper account created
-- [ ] Options level 3 confirmed on the **new** account
-- [ ] Keys in `.env` as `ALPACA_PAPER_KEY` / `ALPACA_PAPER_SECRET`
-- [ ] `GEMINI_API_KEY` in `.env`
-- [ ] MCP server running, read only toolset confirmed
-- [ ] `place_option_order` verified **absent** from the Reviewer's tools
+- [x] Alpaca paper account confirmed (account PA3LRFJ9JMVX, $100,000 equity, zero positions, zero orders on record)
+- [x] Options level 3 confirmed on the account (`options_approved_level: 3`, verified live via `get_account()`)
+- [x] Keys in `.env` as `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` (kept the pipeline's existing names rather than `ALPACA_PAPER_KEY` -- same account already used read-only for market data, never traded)
+- [x] `GEMINI_API_KEY` in `.env`
+- [x] MCP server running, read-only toolset confirmed -- `pipeline/mcp/reviewer_server.py` builds the server from a hand-picked operation allowlist rather than the package's `ALPACA_TOOLSETS` env var, because its "trading" toolset bundles safe reads (positions, orders) with dangerous writes (close position, exercise, and the order-placement overrides) under one name. 47 tools registered, all `get_*`/`list_*`/`search_*`/`fetch_*`.
+- [x] `place_option_order` verified **absent** from the Reviewer's tools -- confirmed programmatically (not present in the 47 registered tools, and never even defined since `register_order_tools` is never called). Also ran the account-state drill: `get_account_info` through MCP returned the same account number, equity, and options level as the direct `alpaca-py` call.
 
 ### 2-4. Read path
 - [ ] `options/contracts.py` OCC symbols, expiry calendar
