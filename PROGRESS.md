@@ -43,8 +43,8 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] **Provisional numbers confirmed or corrected** -- confirmed and stronger than the provisional estimate: real cushion is 2.28-3.28 SE at 3% distance, versus the hand-computed provisional estimate of 1.8 SE (which was below the bar). 1% and 2% distances confirmed underpaid, matching the provisional finding.
 
 ### 6-9. Decision path
-- [ ] `risk/options_config.py`
-- [ ] `risk/guards.py` (14 guards)
+- [x] `risk/options_config.py` -- found and fixed a real inconsistency while wiring it up: the plan's Guard #8 credit/width floor (0.08, a judgment call per Part 9B) would have blocked **every** cell the Experiment 11 evidence gate approved (the 3% distance survivors measure 0.055-0.068 credit/width). Lowered to 0.04.
+- [x] `risk/guards.py` (14 guards) -- pure functions on plain dicts, unit-tested against fake account states: clean proposal passes all 14; exactly at the 5%/8% drawdown lines blocks, one dollar under passes; at the 4-position cap blocks; IV=None blocks on data-sanity grounds.
 - [ ] `options/selector.py` (9 picker rules)
 - [ ] `audit/log.py` schema first
 - [ ] `execution/broker.py` + `orders.py`, dry run default
