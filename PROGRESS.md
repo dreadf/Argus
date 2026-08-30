@@ -51,7 +51,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 
 ### 10-12. Manage and show
 - [x] `execution/monitor.py` 15 minute loop -- the four exit checks in priority order (one-leg orphan, day-before-expiry, profit target, hard drawdown). Self-checks: fresh position holds; profit target fires at <=50% buyback; day-before-expiry forces a close even when the profit target isn't hit (priority ordering verified); orphaned short leg triggers emergency close; hard drawdown triggers halt; build_close_order/build_emergency_single_leg_close carry the correct BUY_TO_CLOSE/SELL_TO_CLOSE intents.
-- [ ] `ui/app.py` renders from files with zero positions
+- [x] `ui/app.py` renders from files with zero positions -- reads the (now committed, no longer gitignored) evidence gate CSV, the audit log, and live account state if reachable, each wrapped so a missing file or broker error renders a plain message instead of a stack trace. Ran live via `streamlit run`: HTTP 200, no exceptions. Cold-open drill run directly (temporarily removed the evidence gate CSV): falls through to the "not yet computed" warning cleanly, no crash. Found and fixed the evidence-gate/backtest CSVs being gitignored, which would have left a fresh Streamlit Cloud deploy with nothing to show -- added `.gitignore` exceptions for those two specific result files.
 - [ ] Deployed to Streamlit Cloud with `CONTROLS_ENABLED=false`
 
 ### Tonight, 20:30 WIB
