@@ -30,7 +30,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `place_option_order` verified **absent** from the Reviewer's tools -- confirmed programmatically (not present in the 47 registered tools, and never even defined since `register_order_tools` is never called). Also ran the account-state drill: `get_account_info` through MCP returned the same account number, equity, and options level as the direct `alpaca-py` call.
 
 ### 2-4. Read path
-- [ ] `options/contracts.py` OCC symbols, expiry calendar
+- [x] `options/contracts.py` OCC symbols, expiry calendar -- round-trip build/parse verified across integer and half-dollar strikes, both rights; expiry window verified against a real Monday anchor. No holiday awareness (see note below); relies on the live chain fetch to catch a listed-but-nonexistent expiry.
 - [ ] `options/chain.py` fetches a real chain with retry and liquidity filter
 - [ ] `options/vol.py` annualized realized vol on log returns
 
@@ -103,3 +103,5 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 ## Notes and failures
 
 *(Record what broke and why. Leave the box unticked.)*
+
+- **The plan's "no market holidays fall inside the window" claim was wrong once building actually started today (Mon Aug 31).** The 7-11 DTE window computed live reaches Sep 7-11, and **Sep 7, 2026 is Labor Day** (first Monday of September). `contracts.expiries_in_window` is a pure weekday filter and has no holiday awareness, so it lists Sep 7 as a candidate -- it will simply come back empty when `chain.py` fetches it live, and Guard #2 (data sanity) skips on empty/stale chain data, so this is not a safety gap. Noted here because the plan stated a false certainty; the actual Picker rule (#6: choose from expiries that exist) already covers it correctly by construction.
