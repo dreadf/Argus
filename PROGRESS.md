@@ -32,7 +32,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 ### 2-4. Read path
 - [x] `options/contracts.py` OCC symbols, expiry calendar -- round-trip build/parse verified across integer and half-dollar strikes, both rights; expiry window verified against a real Monday anchor. No holiday awareness (see note below); relies on the live chain fetch to catch a listed-but-nonexistent expiry.
 - [x] `options/chain.py` fetches a real chain with retry and liquidity filter -- verified live against the real market: spot $769.28, 200 SPY puts across the two Sep 9/11 expiries in the 7-11 DTE window, prices rise monotonically with strike, 70/100 pass the liquidity filter at the Sep 11 expiry. Found and fixed a real bug: Alpaca's `get_option_contracts` and `get_option_chain` both silently default to calls only when `type` is omitted -- an unfiltered request returned 200 calls and 0 puts.
-- [ ] `options/vol.py` annualized realized vol on log returns
+- [x] `options/vol.py` annualized realized vol on log returns -- self-checks pass (zero vol on flat/pure-drift series, sane range against `raw_SPY.csv`, live fetch matches the CSV's overlapping window: 10-day RV 0.0789 stale vs 0.0790 live). Found the account's data subscription rejects recent SIP bars ("does not permit querying recent SIP data"); fixed by requesting the IEX feed explicitly, which is free-tier eligible and sufficient for daily closes.
 
 ### 5. The backtest (the long pole)
 - [ ] `backtest/spread_backtest.py` replays expired contracts
