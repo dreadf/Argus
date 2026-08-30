@@ -68,7 +68,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [ ] Switch to AUTO
 
 ## Wed Sep 2 - buffer
-- [ ] Experiment 10 if there is room (naive vs HAR-RV vs XGBoost)
+- [ ] Experiment 11 if there is room (naive vs HAR-RV vs XGBoost)
 - [ ] Otherwise start submission assets early
 
 ## Thu Sep 3 - submission assets

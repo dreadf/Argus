@@ -192,7 +192,7 @@ Short, specific, and names the mechanism that makes the project unusual. *(Check
 
 ## Long description
 
-> We spent nine documented experiments trying to predict whether stocks would go up or down. They failed. Pooled model AUC landed at 0.498, and one experiment found the model was reliably *wrong* - momentum's cross-sectional information coefficient flipped sign between training and test (+0.0095 → −0.0422). We published the negative result instead of shipping it.
+> We spent ten documented experiments trying to predict whether stocks would go up or down. They failed. Pooled model AUC landed at 0.498, and one experiment found the model was reliably *wrong*: momentum's cross-sectional information coefficient flipped sign between training and test (+0.0095 to −0.0422). Our last two attempts appeared to improve on AUC, so we built calibrated measurement tooling and re-measured them properly. Both came back indistinguishable from zero. The improvement had been noise the whole time. We published the negative result instead of shipping it.
 >
 > Then we noticed we had been asking the wrong question. An insurance seller doesn't care which way the market moves - only how far. So we rebuilt around selling defined-risk S&P 500 put spreads, where every position's maximum loss is fixed before entry.
 >
@@ -267,8 +267,8 @@ This is a different system from the one in `TRADING_SYSTEM_PLAN.md`, so it gets 
 | File | Status | Contents |
 |---|---|---|
 | **`OPTIONS_SYSTEM_PLAN.md`** | 🆕 new | Parts 1–10 of this plan: the strategy, risk rules, architecture, schedule |
-| **`VOLATILITY_ML_PLAN.md`** | 🆕 new | Part 11: the volatility research track, Experiments 10–14 |
-| `EXPERIMENT.md` | ✏️ appended | Continues unbroken. Experiment 10 onward lands here, same format. |
+| **`VOLATILITY_ML_PLAN.md`** | 🆕 new | Part 11: the volatility research track, Experiments 11 to 15 |
+| `EXPERIMENT.md` | ✏️ appended | Continues unbroken. Experiments 0 to 10 are the equity track; 11 onward lands here in the same format. |
 | `TRADING_SYSTEM_PLAN.md` | 📦 unchanged | Kept as-is. Its Layer 0/1 code and design ideas are reused; the equity long/short parts are superseded. |
 | `ML_Experiment_Plan.md` | 📦 unchanged | The direction question is closed with a documented negative answer. Superseded by `VOLATILITY_ML_PLAN.md`. |
 | `Project_Context_and_Plan_Updated.md` | 📦 unchanged | Its gating criteria and risk table are the source material we translated. |
@@ -291,7 +291,7 @@ SPY was around **$763** when these examples were written. **Every figure below i
 | **If SPY stays above $740** | We keep the $27 **and** our deposit back |
 | **If SPY falls past $735** | They keep our $473 |
 
-> **⚠️ Every number in this table is a placeholder, not a decision.** The 3% distance, the $5 gap between $740 and $735, the $27 fee - all of these are *parameters we choose*, and choosing them by eye is exactly the mistake this project spent nine experiments learning to avoid. SPY strikes are listed $1 apart, so the gap could be $1, $2, $5, or $10, and each choice changes the fee, the max loss, and the capital tied up. **The backtest sweeps distance AND gap width together**, and the evidence gate (Part 2B) picks the combination - or reports that none qualify. Read this table as "here's the shape of a bet," not "here's the bet."
+> **⚠️ Every number in this table is a placeholder, not a decision.** The 3% distance, the $5 gap between $740 and $735, the $27 fee - all of these are *parameters we choose*, and choosing them by eye is exactly the mistake this project spent ten experiments learning to avoid. SPY strikes are listed $1 apart, so the gap could be $1, $2, $5, or $10, and each choice changes the fee, the max loss, and the capital tied up. **The backtest sweeps distance AND gap width together**, and the evidence gate (Part 2B) picks the combination - or reports that none qualify. Read this table as "here's the shape of a bet," not "here's the bet."
 
 Three things to notice:
 
@@ -451,7 +451,7 @@ Suppose you know for certain SPY will move **2%** this week.
 
 **Same forecast. Opposite outcomes.** Being right about SPY isn't what pays. Being right about *the gap between what was priced and what happened* is.
 
-That's why forecasting volatility alone isn't sufficient, and why Experiment 12 targets the gap itself.
+That's why forecasting volatility alone isn't sufficient, and why Experiment 13 targets the gap itself.
 
 ## How we get OUT of a position (and why it isn't breaking a promise)
 
@@ -661,7 +661,7 @@ Our architecture is **not** novel. It is the reference implementation. Any submi
 
 ## How we actually differ - and it's sharper than novelty
 
-Their five agents exist to **generate more trade proposals**. We ran the experiment that asks whether such proposals are worth generating at all, and for our feature set the answer was no - nine documented experiments, AUC 0.498, a model that was reliably *wrong*.
+Their five agents exist to **generate more trade proposals**. We ran the experiment that asks whether such proposals are worth generating at all, and for our feature set the answer was no - ten documented experiments, AUC 0.498, a model that was reliably *wrong*.
 
 So we inverted the same architecture:
 
@@ -697,15 +697,15 @@ The strategy above is what any honest person lands on once options are mandatory
 
 **This is:**
 
-Nine experiments asked *"will SPY go up or down?"* The answer was a documented, rigorous **no** - coin flip, and one experiment showed the model was reliably *wrong*.
+Ten experiments asked *"will SPY go up or down?"* The answer was a documented, rigorous **no**: coin flip, one experiment showed the model reliably *wrong*, and Experiment 10 then re-measured the two most promising results with cross-sectional IC and found both indistinguishable from zero.
 
 But an insurance seller **does not care which way the market moves.** We only care **how far**.
 
 And that question has a different answer. **Volatility clusters** - calm weeks follow calm weeks, wild weeks follow wild weeks. It's one of the most reliable patterns in finance. Direction is unpredictable. Magnitude is not.
 
-> **We spent nine experiments answering the wrong question. The right one was sitting next to it the whole time.**
+> **We spent ten experiments answering the wrong question. The right one was sitting next to it the whole time.**
 
-**One honest tempering, checked against real research before we oversell this:** the standard baseline for volatility forecasting - literally just "average yesterday's swing, last week's, and last month's" - is already very hard to beat. Published comparisons find it consistently **beats GARCH models** and holds up against more complex approaches ([ScienceDirect](https://www.sciencedirect.com/science/article/am/pii/S0927539824000598)). So "predict how far it moves" is a much better *question* than "predict which way," but that doesn't guarantee XGBoost adds anything on top of the simple average, especially on a few years of daily SPY data. Experiment 10 (below) might well conclude "ML doesn't beat the simple baseline" - which, by this project's own standard, is still a legitimate, loggable result, not a failure.
+**One honest tempering, checked against real research before we oversell this:** the standard baseline for volatility forecasting - literally just "average yesterday's swing, last week's, and last month's" - is already very hard to beat. Published comparisons find it consistently **beats GARCH models** and holds up against more complex approaches ([ScienceDirect](https://www.sciencedirect.com/science/article/am/pii/S0927539824000598)). So "predict how far it moves" is a much better *question* than "predict which way," but that doesn't guarantee XGBoost adds anything on top of the simple average, especially on a few years of daily SPY data. Experiment 11 (below) might well conclude "ML doesn't beat the simple baseline" - which, by this project's own standard, is still a legitimate, loggable result, not a failure.
 
 ## What the volatility layer actually does
 
@@ -721,7 +721,7 @@ Then it makes two decisions:
 
 So the ML isn't picking trades. It's answering the one question that determines whether our bet is safe: *how much is this thing going to move?*
 
-## The honesty gate (Experiment 10)
+## The honesty gate (Experiment 11)
 
 There's an obvious cheap baseline: **"however much it moved last week, assume the same next week."** That's what volatility clustering means, and it's already a strong forecast.
 
@@ -1224,7 +1224,7 @@ Because your day runs ahead of ET, **you build during your daytime and trade tha
 | **Mon 31, 20:30** | Decision point (see table above). Smoke test tonight if dry-run is clean. | ⬜ |
 | **Tue 1, daytime** | Finish anything unfinished. `recovery.py`. Deploy the UI if not already up. | 🔴 UI is a submission requirement |
 | **Tue 1, 21:00** | **LIVE.** MANUAL for the first order, then AUTO. | 🔴 |
-| **Wed 2, daytime** | **Experiment 10** if there's room. Otherwise start submission assets a day early - that buys slack. | 🟢 Exp 10 optional |
+| **Wed 2, daytime** | **Experiment 11** if there's room. Otherwise start submission assets a day early - that buys slack. | 🟢 Exp 11 optional |
 | **Wed 2, 21:00** | AUTO, full size. | ⬜ |
 | **Thu 3, daytime** | **SUBMISSION ASSETS.** Video, slides, cover image, write-up, README, LICENSE, repo public, `.gitignore` fix. 6–8 hours. | 🔴 No partial credit |
 | **Thu 3, 21:00** | Trade. Close anything at 50%+ profit to realize it. | ⬜ |
@@ -1246,9 +1246,9 @@ Build order #1–12 is ranked by value, so the honest fallback is simply "stop w
 | UI built + deployed | **Submission requirement failed.** | ❌ Never |
 | `recovery.py` | Lose the partial-fill net - partly mitigated by Alpaca's coverage rule | 🟡 3rd |
 | Full guard set (14) | Ship the 6 that bind: budget, per-trade cap, gate, expiry-day, liquidity, drawdown | 🟡 2nd |
-| Experiment 10 | An ML result we already expect to be "the simple baseline won" | 🟢 **1st** |
+| Experiment 11 | An ML result we already expect to be "the simple baseline won" | 🟢 **1st** |
 
-### Experiment 10 - Wednesday, only if Tuesday is clean
+### Experiment 11 - Wednesday, only if Tuesday is clean
 
 **The expensive part is backtest infrastructure, not the forecast**, and `engineered_SPY.csv` already holds the features.
 
@@ -1262,7 +1262,7 @@ One metric (**QLIKE**), one walk-forward split. **Whichever wins ships.** If the
 
 ### What this week still costs us
 
-- **Experiments 11–14 are out of scope**, presented as documented next steps
+- **Experiments 12 to 15 are out of scope**, presented as documented next steps
 - **3 trading sessions** (Tue, Wed, Thu) plus a partial Friday - **4 if tonight's smoke test happens**
 - **The rule ablations (Part 6) compete with build time** - run the cheap sweeps inside the backtest, defer the rest
 - Wednesday is the only real buffer. Protect it.
@@ -1292,7 +1292,7 @@ We submit **Friday 11:00 ET**. Our bets run 7–11 days. So **at submission we w
 
 1. The false-trip test - eyeball thresholds against the backtest table manually.
 2. Multiple concurrent bets - run one at a time instead of up to four.
-3. **The ML volatility model** - fall back to "assume vol stays the same," a legitimate forecast on its own. Log it as the Experiment 10 result either way.
+3. **The ML volatility model** - fall back to "assume vol stays the same," a legitimate forecast on its own. Log it as the Experiment 11 result either way.
 4. **The Reviewer's MCP wiring** - fall back to the Alpaca CLI (allowed by the rules) or, worst case, feed it a plain text summary. *Decide Tuesday.*
 5. **The Reviewer entirely** - if Gemini wiring fails, write the explanation by hand. But note this weakens the "AI logic" section of the required write-up, so cut it late.
 6. The backtest - **only** if Tuesday collapses. Without it you're trading on vibes and have no differentiator.
@@ -1327,7 +1327,7 @@ Never made one, it's a scored criterion, and lablab's own advice is *a 4-minute 
 |---|---|---|
 | **0:00–0:20** | The live dashboard, a real position open | *"This agent sells S&P 500 insurance. Here it is running. Every position's maximum loss is fixed before entry."* **Show the product first.** |
 | **0:20–1:10** | The payoff table, loss flattening at −$473 | How a spread works - sell one contract, buy cheaper protection, loss capped by structure not by discipline |
-| **1:10–2:10** | `EXPERIMENT.md`, then the premium table | *"We spent nine experiments failing to predict direction. Then we held this strategy to the same standard - and at the strikes most people sell, the premium is **negative**."* **This is the differentiator. Give it the most time.** |
+| **1:10–2:10** | `EXPERIMENT.md`, then the premium table | *"We spent ten experiments failing to predict direction. Then we held this strategy to the same standard - and at the strikes most people sell, the premium is **negative**."* **This is the differentiator. Give it the most time.** |
 | **2:10–2:50** | Evidence gate output; a logged SKIP | *"It only trades when the measured edge clears two standard errors. Here it is refusing."* |
 | **2:50–3:30** | Mode selector, limits screen, an audit row | Risk architecture. *"The AI reviews every trade through MCP - with the order-placing tools removed. It can veto or shrink. It can never choose a trade or make one bigger."* |
 | **3:30–4:00** | Equity curve vs SPY benchmark | Honest results. *"Three sessions is a sample, not proof. Here's what we'd test next."* |
@@ -1422,7 +1422,7 @@ pipeline/ui/app.py                      Streamlit: dashboard, limits, approvals,
 pipeline/run_agent.py                   daily entry, --dry-run default True
 ```
 
-**This is the full target list. Part 7's build order is the subset that fits today**, ranked by value. These are in the file list but NOT in today's build order, and are honest stretch items: `volatility/*` (Experiment 10), `false_trip.py`, `modes.py`, `limits_store.py`, `snapshot.py`, `reconcile.py`, `recovery.py`. If a module is missing at submission, say so in the write-up rather than implying it exists.
+**This is the full target list. Part 7's build order is the subset that fits today**, ranked by value. These are in the file list but NOT in today's build order, and are honest stretch items: `volatility/*` (Experiment 11), `false_trip.py`, `modes.py`, `limits_store.py`, `snapshot.py`, `reconcile.py`, `recovery.py`. If a module is missing at submission, say so in the write-up rather than implying it exists.
 
 ## MCP - what it is, what it does, and exactly how we use it
 
@@ -1663,7 +1663,7 @@ SEMI-AUTO can ask for approval at 21:00 while you're eating, asleep, or away.
 **Reuse:**
 - `news_extract.py:47-57` (retry/backoff) + `:77` (rate limit) → the pattern for `chain.py`. **Not** `extract.py:17` - no retry, no checkpointing.
 - `eval.py:38` non-overlapping discipline → always report `n_eff` and a confidence interval, never a bare Sharpe.
-- `model/baseline_model.py` → the *shape* of Experiment 10's baseline comparison.
+- `model/baseline_model.py` → the *shape* of Experiment 11's baseline comparison.
 - `TRADING_SYSTEM_PLAN.md:301` reconciliation design (send the difference, idempotent).
 - `raw_SPY.csv` for spot - **not** `engineered_SPY.csv`, which contains `fwd_5d_return`, the answer key.
 - SPY features already in `engineered_SPY.csv` (`volatility_5/10`, `ATR_5/10`, `RSI`, `momentum_*`) → inputs to the vol model.
@@ -1754,7 +1754,7 @@ Credit spreads are explicitly Level 3 ([Alpaca's own list](https://alpaca.market
 
 1. Selector runs against a saved weekend snapshot - emits a full bet or a clean `None`, never crashes on missing greeks.
 2. Backtest self-checks: prices rise with strike, real session dates only, `n_eff` beside every Sharpe, reproduces the 3% cell (charged 5.4% vs actual 2.5%).
-3. **Experiment 10 reports both** the baseline and the ML score. Whichever wins ships. Result goes in `EXPERIMENT.md` either way.
+3. **Experiment 11 reports both** the baseline and the ML score. Whichever wins ships. Result goes in `EXPERIMENT.md` either way.
 4. Guard unit tests on fake account states: at the drawdown line, one dollar over, at max bets, with `IV=None`.
 5. False-trip: no gate blocks >30% of winners.
 6. `python -m pipeline.run_agent --dry-run` prints the bet, writes an audit row, sends nothing.
@@ -1780,7 +1780,7 @@ Credit spreads are explicitly Level 3 ([Alpaca's own list](https://alpaca.market
 
 # PART 9 - What we admit openly
 
-1. **We overfit during research.** 13+ configurations tested against the same 120 observations. The best result sits ~2.2 standard errors from zero *before* multiple-testing correction, and isn't significant after. **Log all 13 in `EXPERIMENT.md`** - reporting only the winner is the exact mistake nine experiments were spent avoiding. This is also *why* Part 2B's evidence gate exists: picking "3%" because its row had a checkmark would have been the same mistake in a different costume.
+1. **We overfit during research.** 13+ configurations tested against the same 120 observations. The best result sits ~2.2 standard errors from zero *before* multiple-testing correction, and isn't significant after. **Log all 13 in `EXPERIMENT.md`** - reporting only the winner is the exact mistake ten experiments were spent avoiding. This is also *why* Part 2B's evidence gate exists: picking "3%" because its row had a checkmark would have been the same mistake in a different costume.
 2. **The strategy is shaped like a known failure pattern, and we're saying so rather than hiding it.** Small steady wins against rare large losses is the "picking up pennies in front of a steamroller" pattern, and its canonical real-world failure (Volmageddon, 2018) wiped out a popular fund overnight. Our defenses against it: (a) every position is capped-loss by construction, (b) the evidence gate requires the win-rate cushion to clear noise, not just be positive, (c) all open positions are risk-capped as one combined crash event, not stacked independent ones.
 3. **The backtest is currently scratch work.** A research agent produced it; it is not in the repo. Tuesday's job is rebuilding it as real code. **Don't cite numbers you haven't reproduced yourself.**
 4. **Option history only goes back to Feb 2024** - about 2.5 years, one broad market regime. Same single-regime weakness Experiment 6d found in the equity work.
@@ -1794,7 +1794,7 @@ Credit spreads are explicitly Level 3 ([Alpaca's own list](https://alpaca.market
 
 # PART 9B - Where every number comes from (the honesty audit)
 
-You asked whether everything is data-supported. **It isn't, and pretending otherwise would repeat the exact mistake this project spent nine experiments learning to avoid.** Every number in this plan falls into one of three categories.
+You asked whether everything is data-supported. **It isn't, and pretending otherwise would repeat the exact mistake this project spent ten experiments learning to avoid.** Every number in this plan falls into one of three categories.
 
 ## 🟢 MEASURED - from our own data
 
@@ -2176,7 +2176,7 @@ No charts to read, no jargon on screen. If someone wants the reasoning behind a 
 
 > **⚠️ Provisional until the backtest is rebuilt.** The claims below about the premium being negative, and about the stop-loss result, come from an unreproduced research script. Confirm them against `pipeline/backtest/spread_backtest.py` before publishing this anywhere.
 
-> We spent nine experiments proving we could not predict **which way** the S&P 500 would move, and published the negative result instead of shipping it.
+> We spent ten experiments proving we could not predict **which way** the S&P 500 would move, and published the negative result instead of shipping it.
 >
 > Then we noticed we had been asking the wrong question. An insurance seller doesn't care about direction - only about **how far**. And unlike direction, that is predictable: volatility clusters.
 >
