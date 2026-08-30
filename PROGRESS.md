@@ -50,7 +50,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `execution/broker.py` + `orders.py`, dry run default -- broker.py reads live account/position/clock state (verified live: $100,000 equity, options level 3, market closed, next open correctly shown). orders.py builds the real two-legged MLEG order (SELL_TO_OPEN short / BUY_TO_OPEN long) and defaults to dry_run=True everywhere; self-check confirms nothing is sent. **Net-price sign convention is explicitly flagged as unverified** in the module docstring and printed prominently in dry-run output -- Alpaca's docs don't state it, so it can only be confirmed on Tuesday's first live 1-contract fill (Verification #7), not assumed here.
 
 ### 10-12. Manage and show
-- [ ] `execution/monitor.py` 15 minute loop
+- [x] `execution/monitor.py` 15 minute loop -- the four exit checks in priority order (one-leg orphan, day-before-expiry, profit target, hard drawdown). Self-checks: fresh position holds; profit target fires at <=50% buyback; day-before-expiry forces a close even when the profit target isn't hit (priority ordering verified); orphaned short leg triggers emergency close; hard drawdown triggers halt; build_close_order/build_emergency_single_leg_close carry the correct BUY_TO_CLOSE/SELL_TO_CLOSE intents.
 - [ ] `ui/app.py` renders from files with zero positions
 - [ ] Deployed to Streamlit Cloud with `CONTROLS_ENABLED=false`
 
