@@ -27,6 +27,6 @@ SYMBOLS = [
 START_DATE = datetime(2020, 1, 1)
 END_DATE = datetime(2026, 8, 25)
 
-# Broad-market proxy (S&P 500 ETF), used to build residual/beta features.
+# Broad-market proxy (S&P 500 ETF), used to build residual features.
 # Kept separate from SYMBOLS so it never becomes a tradeable long/short candidate.
 MARKET_SYMBOL = "SPY"
