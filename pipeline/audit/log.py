@@ -25,6 +25,7 @@ AUDIT_LOG_PATH = "output/audit/decisions.jsonl"
 # error; it's information (what didn't happen, and why).
 SCHEMA_FIELDS = [
     "timestamp", "mode",
+    "current_equity", "peak_equity",
     "spy_price", "vol_forecast",
     "gate_distance", "gate_cushion_se",
     "proposed_contracts", "proposed_credit", "proposed_max_loss",

@@ -49,7 +49,26 @@ def _already_decided_today() -> bool:
     log_dates = pd.to_datetime(log_df["timestamp"], utc=True).dt.date
     today_utc = datetime.now(timezone.utc).date()
     todays_rows = log_df[log_dates == today_utc]
-    return any(o in ("SOLD", "SKIPPED") for o in todays_rows.get("outcome", []))
+    # NB: DRY_RUN must be included here -- an earlier version only checked
+    # SOLD/SKIPPED, which meant every accepted-but-not-yet-live proposal
+    # (the entire dry-run build/test period) was NOT recognized as already
+    # decided, so a second same-day run would re-evaluate and log a second
+    # accepted proposal. Confirmed by running twice in sequence before this
+    # fix: two DRY_RUN rows were written for one session instead of one.
+    return any(o in ("SOLD", "SKIPPED", "DRY_RUN") for o in todays_rows.get("outcome", []))
+
+
+def _load_peak_equity() -> float | None:
+    """Peak equity must persist across runs to mean anything (Guards #13/#14
+    compare current equity against it). The audit log is the only durable
+    state this project writes, so peak is derived from the max current_equity
+    ever logged; a fresh account with no log rows returns None, which
+    broker.get_account_state treats as "peak = current equity", per the
+    cold-start table in Part 6."""
+    log_df = read_log()
+    if log_df.empty or "current_equity" not in log_df or log_df["current_equity"].dropna().empty:
+        return None
+    return float(log_df["current_equity"].dropna().max())
 
 
 def run_once(dry_run: bool = True, today: date | None = None) -> dict:
@@ -74,7 +93,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         return {"outcome": "SKIPPED", "reason": "no evidence gate"}
     gate_df = pd.read_csv(GATE_PATH)
 
-    account = get_account_state()
+    account = get_account_state(peak_equity=_load_peak_equity())
     spot = get_spot()
     closes = fetch_recent_closes()
     rv_10d = realized_vol(closes, 10)
@@ -87,6 +106,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     if proposal is None:
         append_entry({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "outcome": "SKIPPED", "guards_failed": ["no viable proposal from selector"],
         })
         print("Picker found no viable trade today (empty gate, no listed strikes, or budget too small). Logged SKIP.")
@@ -104,6 +124,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         reasons = [f"{f['guard']}: {f['reason']}" for f in guard_result["failed"]]
         append_entry({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
             "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
             "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
@@ -116,6 +137,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     append_entry({
         "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+        "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
         "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
         "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
         "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
