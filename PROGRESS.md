@@ -35,12 +35,12 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `options/vol.py` annualized realized vol on log returns -- self-checks pass (zero vol on flat/pure-drift series, sane range against `raw_SPY.csv`, live fetch matches the CSV's overlapping window: 10-day RV 0.0789 stale vs 0.0790 live). Found the account's data subscription rejects recent SIP bars ("does not permit querying recent SIP data"); fixed by requesting the IEX feed explicitly, which is free-tier eligible and sufficient for daily closes.
 
 ### 5. The backtest (the long pole)
-- [ ] `backtest/spread_backtest.py` replays expired contracts
-- [ ] Sweeps distance **and** width
-- [ ] Self checks pass: prices rise with strike, real session dates only
-- [ ] `backtest/evidence_gate.py` computes SE cushion per distance
-- [ ] Result recorded in `EXPERIMENT.md`
-- [ ] **Provisional numbers confirmed or corrected**
+- [x] `backtest/spread_backtest.py` replays expired contracts -- 128 candidate Fridays from 2024-02-01, real historical option closes fetched live, settled at intrinsic value against real SPY closes
+- [x] Sweeps distance **and** width -- 6 distances x 4 widths = 24 cells, 2,921 of 3,072 with valid data (rest missing due to zero-volume deep-OTM contracts, not a defect)
+- [x] Self checks pass: prices rise with strike (58/2921 cells with small negative credit, all concentrated at illiquid 4-6% distances, immaterial to the 3% result); real session dates only (entry/expiry dates come from `raw_SPY.csv`'s own index)
+- [x] `backtest/evidence_gate.py` computes SE cushion per distance -- 3 cells clear 2 SE, all at 3% distance (widths $1/$2/$5, cushions 3.28/2.97/2.28 SE)
+- [x] Result recorded in `EXPERIMENT.md` as **Experiment 11** (renumbered the volatility ML ladder from 11-15 to 12-16 to make room, since this backtest reproduction slots in chronologically before Wednesday's volatility forecasting experiment)
+- [x] **Provisional numbers confirmed or corrected** -- confirmed and stronger than the provisional estimate: real cushion is 2.28-3.28 SE at 3% distance, versus the hand-computed provisional estimate of 1.8 SE (which was below the bar). 1% and 2% distances confirmed underpaid, matching the provisional finding.
 
 ### 6-9. Decision path
 - [ ] `risk/options_config.py`
@@ -68,7 +68,7 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [ ] Switch to AUTO
 
 ## Wed Sep 2 - buffer
-- [ ] Experiment 11 if there is room (naive vs HAR-RV vs XGBoost)
+- [ ] Experiment 12 if there is room (naive vs HAR-RV vs XGBoost)
 - [ ] Otherwise start submission assets early
 
 ## Thu Sep 3 - submission assets

@@ -401,6 +401,35 @@ Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set
 
 ---
 
+## Experiment 11 — Replaying the SPY put credit spread against real expired option prices
+
+**Context:** the project pivoted from predicting SPY direction to selling put credit spreads (defined-risk insurance on a crash), per `OPTIONS_SYSTEM_PLAN.md`. The core empirical question: at each distance below spot and each spread width, did the market pay more than the risk actually delivered? An earlier version of this measurement existed only as a throwaway research script, not committed code, and every number from it was explicitly marked provisional. This entry is the reproduction in real, committed code.
+
+**What we did:** for every Friday from 2024-02-01 (the start of Alpaca's expired-option-contract history) through 2026-08-21, computed the short and long put strikes for six distances (1% to 6% below that Friday's real SPY close, rounded away from spot to the nearest $1) crossed with four widths ($1, $2, $5, $10), fetched the real historical closing price of both legs on the entry date, and settled each spread at intrinsic value against the real SPY close on the following Friday (the plan's stated entry/settlement assumptions: bar-close entry, no slippage, intrinsic-value settlement). 128 candidate weeks, 2,921 of 3,072 (distance x width) cells had real trade prices for both legs; the rest were dropped as missing data (mostly deep-OTM contracts with zero volume on the entry day, not a defect). For each surviving cell, computed the win rate, the breakeven win rate implied by that cell's own average credit and width, and the cushion between them in standard errors, using `n` = the number of non-overlapping entry weeks (same discipline as `eval.py:38`'s `n_eff`).
+
+**Results (2% and 3% distance shown; full sweep of all 24 cells in `output/data/evidence_gate_results.csv`):**
+
+| Distance | Width | n | Win rate | Required (breakeven) | Cushion (SE) | Mean net P&L/contract | Clears 2 SE? |
+|---|---|---|---|---|---|---|---|
+| 2% | $1 | 127 | 89.0% | 87.8% | 0.44 | $0.031 | No |
+| 2% | $5 | 127 | 89.0% | 90.1% | -0.39 | $0.227 | No |
+| **3%** | **$1** | **126** | **97.6%** | **93.2%** | **3.28** | **$0.052** | **Yes** |
+| **3%** | **$2** | **126** | **97.6%** | **93.6%** | **2.97** | **$0.096** | **Yes** |
+| **3%** | **$5** | **126** | **97.6%** | **94.5%** | **2.28** | **$0.194** | **Yes** |
+| 3% | $10 | 124 | 97.6% | 95.6% | 1.45 | $0.315 | No |
+| 4% | $1 | 125 | 98.4% | 96.4% | 1.82 | $0.023 | No |
+| 1% | any width | 127 | 78.0% | 78.6-85.5% | -0.17 to -2.04 | negative or near-zero | No |
+
+**Interpretation:** three cells clear the 2-SE bar, all at **3% distance** -- widths $1, $2, and $5, with cushions of 3.28, 2.97, and 2.28 SE respectively. This is the same distance the provisional (unreproduced) numbers pointed to, and the measured cushion here (2.28-3.28 SE) is **stronger** than the provisional estimate of 1.8 SE that `OPTIONS_SYSTEM_PLAN.md` Part 2B computed by hand and explicitly flagged as below its own bar. At 1% and 2% distance, the market pays less than the risk actually realized -- consistent with the provisional finding, now on real data. Deeper distances (4%+) mostly fail the SE bar not because they lose money, but because so few losses occur in 120-some weeks that the win-rate estimate itself is too imprecise to clear 2 SE against its own (very high) breakeven rate -- a small-sample problem, not evidence the trade is bad.
+
+**Multiple-testing caveat (Part 9's admission #1):** 24 (distance, width) cells were tested against the same ~126 non-overlapping weeks. Three clearing the bar out of 24 is not automatically robust to that; the $1 and $2 widths post the highest SE cushions but the lowest per-contract P&L, while $5 width has the most P&L but the thinnest cushion. No single cell is picked here -- `selector.py` (Build Step 7) is where that trade-off gets resolved, and it should not be resolved by picking whichever looks best in this table after the fact.
+
+**What this replaces:** every "1.8 SE, below the bar" and "provisional" framing throughout `OPTIONS_SYSTEM_PLAN.md`, `PROGRESS.md`, and the draft submission copy in Part 0B is now superseded by this measurement. Those documents still describe the *reasoning* correctly (the evidence-gate method, the conservative breakeven formula); only the specific numbers were provisional, and this entry is what they were provisional pending.
+
+**Known limitations, stated rather than hidden:** entry priced at bar close and settlement at intrinsic value are assumptions, not universal facts -- no slippage is modeled here (the plan's cost sweep for that is a separate, not-yet-run step). Option history covers Feb 2024 onward, roughly one broad market regime, the same single-regime weakness flagged in Experiment 6d. 151 of 3,072 cells were dropped for missing data, concentrated in deep-OTM, thin-volume contracts; this does not affect the 3% distance result materially (124-126 of 128 candidate weeks had valid data at every width tested there).
+
+---
+
 ## Running Synthesis (as of last entry)
 
 The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).
