@@ -17,9 +17,9 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `OPTIONS_SYSTEM_PLAN.md` written
 - [x] `VOLATILITY_ML_PLAN.md` written
 - [x] `PROGRESS.md` seeded
-- [ ] `LICENSE` (MIT) added
-- [ ] `.gitignore` fixed so the plan docs are tracked
-- [ ] Committed
+- [x] `LICENSE` (MIT) added
+- [x] `.gitignore` fixed so the plan docs are tracked
+- [x] Committed (8227f43, c0e517e)
 
 ### 1. Accounts and access
 - [ ] New dedicated Alpaca paper account created
