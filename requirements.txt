@@ -1,6 +1,7 @@
 pandas==3.0.5
 numpy==2.5.2
 scikit-learn==1.9.0
+scipy==1.18.0
 xgboost==3.4.1
 alpaca-py==0.44.0
 python-dotenv==1.2.3

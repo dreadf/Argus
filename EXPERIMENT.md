@@ -372,6 +372,35 @@ Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set
 
 ---
 
+## Experiment 10 — Re-measuring Experiments 8 & 9 with IC Instead of AUC
+
+**Scripts:** `pipeline/signals/signals.py` (new — `random_signal`, `oracle_signal`, `planted_ic_signal`, `model_signal`) and `pipeline/signals/eval.py` (new — `daily_ic`, `ic_summary`), per `TRADING_SYSTEM_PLAN.md` Layers 0-1.
+
+**Why:** Experiments 8 and 9 each produced a small AUC increase (0.4968 → 0.5018 → 0.5088) that was flagged both times as plausibly just noise, since AUC on a 50%-base-rate cross-sectional panel barely distinguishes a real edge from chance. `TRADING_SYSTEM_PLAN.md`'s own suggested first session was to build the IC measurement tooling and immediately re-measure Experiment 8 with it, since IC with non-overlapping t-stats is the more decisive metric for this exact question.
+
+**What we did:** Before trusting any IC measurement, calibrated the tool itself against three known-answer signals (the "ruler" check): `random_signal` (pure noise, IC should read ~0), `oracle_signal` (deliberately leaky, scores the model with `fwd_5d_return` itself, IC should read ~1), and `planted_ic_signal(rho)` (blends the true rank with independent noise via `rho*true_z + sqrt(1-rho^2)*noise_z` on a normal-quantile transform, IC should read back ~rho). Results: random → 0.0123 (n=1635 days) / -0.0010 (separate seed), oracle → exactly 1.0000, planted at rho=0.03 → 0.0198 (same ballpark, attributed to sampling noise from the small 40-name cross-section — `random_signal`'s measured std_ic of 0.16 matches the textbook standard error of Spearman correlation for n=40, `1/sqrt(39)`, confirming the tool behaves as statistical theory predicts). All three passed. Then ran `model_signal` on the trained Experiment 8 and Experiment 9 models (test-set predictions only, matching their original chronological split) through `daily_ic` + `ic_summary`.
+
+**Bug found and fixed en route:** `planted_ic_signal`'s per-day blending function initially returned a bare NumPy array from `groupby(...).apply(...)` instead of a `pd.Series` indexed like the group — the same class of bug as `beta_60` in `panel.py` (Experiment 8). Pandas silently collapsed the result to one row per group instead of one row per original row, producing all-NaN scores. Fixed by wrapping the blended array in `pd.Series(blended, index=group.index)`.
+
+**Results:**
+
+| | Experiment 8 (17 features, no news) | Experiment 9 (18 features, +news) |
+|---|---|---|
+| Test ROC-AUC (original metric) | 0.5018 | 0.5088 |
+| **mean_ic** | **-0.0048** | **-0.0038** |
+| std_ic | 0.1976 | 0.2040 |
+| information_ratio | -0.0242 | -0.0186 |
+| n_eff_non_overlap | 63 | 63 |
+| **t_stat_non_overlap** | **-0.73** | **-1.13** |
+
+**Interpretation:** Both models' IC is **indistinguishable from zero** (|t| well under the conventional 2.0 bar), and if anything trends slightly *negative*, not positive. This directly contradicts the impression the rising AUC sequence (0.4968 → 0.5018 → 0.5088) gave across Experiments 7-9 — there was no real improving trend; AUC was oscillating within noise the whole time, exactly as flagged (but not conclusively resolved) in each of those experiments' own interpretation sections. IC with a properly calibrated tool and non-overlapping t-stats settles the ambiguity AUC could not: **neither the market-relative features (Experiment 8) nor adding news_count (Experiment 9) produced a cross-sectionally useful ranking signal.**
+
+**Against the Phase 3 gating criteria:** "IC positive and stable across several consecutive walk-forward windows" — not met, by a wide margin, for either model. This reaffirms the standing conclusion (do not proceed to execution) but now on much firmer statistical footing than the AUC-based reasoning could provide.
+
+**Note on sample size:** `n_eff_non_overlap = 63` for both (the test period's ~315 trading days ÷ 5). `TRADING_SYSTEM_PLAN.md` already flagged that ~70 rebalances is a small sample for any Sharpe/t-stat; 63 is in the same range. A t-stat this far from significance (0.73-1.13 in magnitude, when 2.0 is the bar) is unlikely to flip sign with more data, but the honest caveat is that this test window alone cannot rule out a real, small, well-timed edge appearing in a different period -- consistent with Experiment 6d's broader finding that a single continuous test window is a real limitation of this project's validation design.
+
+---
+
 ## Running Synthesis (as of last entry)
 
 The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).
