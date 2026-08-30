@@ -89,8 +89,8 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 ---
 
 ## Verification drills (Part 8)
-- [ ] Dry run end to end sends nothing
-- [ ] Run twice, second run submits nothing
+- [x] Dry run end to end sends nothing -- built `pipeline/run_agent.py` (the daily entry point tying Picker/Guard/orders together, was missing entirely). Ran the accepted-path end to end: prints the bet, writes one audit row, and a direct account check confirms zero orders exist on the account. Also ran the real blocked-path live (market genuinely closed, then genuinely blocked by the liquidity guard) -- both logged correctly.
+- [x] Run twice, second run submits nothing -- found and fixed a real bug: the idempotency check compared the audit log's UTC timestamps against the local machine's date (WIB, UTC+7), which disagree for most of the day, so a second same-day run was writing a duplicate row instead of no-op'ing. Fixed to compare UTC dates on both sides; re-verified two consecutive runs produce exactly one log row.
 - [ ] Partial fill drill (needs `recovery.py`, not built)
 - [ ] Reconcile drill (needs `reconcile.py`, not built)
 - [x] Pin risk / expiry-rule drill -- `monitor.py` self-check confirms a position one day from expiry closes unconditionally, overriding even an unmet profit target; DTE<=1 catches both "day before" and "on expiry day" (0 DTE)
