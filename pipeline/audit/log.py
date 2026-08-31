@@ -11,6 +11,7 @@ use.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 from datetime import datetime, timezone
@@ -50,8 +51,17 @@ def append_entry(entry: dict, path: str = AUDIT_LOG_PATH) -> dict:
         row["timestamp"] = datetime.now(timezone.utc).isoformat()
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # An exclusive advisory lock around the write -- not triggerable today
+    # (nothing runs concurrently), but becomes real the moment run_agent.py
+    # and monitor.py run as separate scheduled processes writing to the
+    # same file. flock releases automatically when the `with` block exits,
+    # even on a crash, so this can't deadlock a future writer.
     with open(path, "a") as f:
-        f.write(json.dumps(row, default=str) + "\n")
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.write(json.dumps(row, default=str) + "\n")
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
     return row
 
 
