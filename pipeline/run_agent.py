@@ -172,8 +172,15 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true", default=True)
-    parser.add_argument("--live", dest="dry_run", action="store_false")
+    # A mutually exclusive group so passing both flags raises an explicit
+    # argparse error instead of silently picking whichever was typed last
+    # (confirmed via interpreter: the two flags previously wrote to the same
+    # dest with no exclusivity, so "--dry-run --live" went live and
+    # "--live --dry-run" stayed dry-run -- order alone decided whether real
+    # money traded, with no error either way).
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--dry-run", action="store_true", default=True)
+    group.add_argument("--live", dest="dry_run", action="store_false")
     args = parser.parse_args()
 
     result = run_once(dry_run=args.dry_run)
