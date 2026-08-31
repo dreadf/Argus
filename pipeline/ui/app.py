@@ -21,11 +21,20 @@ cold-open drill).
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+# Streamlit Cloud's launch context doesn't put the repo root on sys.path the
+# way `streamlit run` from the repo root locally does -- confirmed via a
+# real deploy log: ModuleNotFoundError: No module named 'pipeline' at the
+# `pipeline.audit.log` import below. Must run before any pipeline.* import.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 import streamlit as st
 
 from pipeline.audit.log import read_log
+from pipeline.risk.options_config import MAX_CONCURRENT_POSITIONS
 
 CONTROLS_ENABLED = os.getenv("CONTROLS_ENABLED", "false").lower() in ("true", "1", "yes")
 
@@ -48,8 +57,9 @@ st.subheader("Account")
 account_state = None
 try:
     from pipeline.execution.broker import get_account_state
+    from pipeline.execution.positions import open_spread_positions
 
-    account_state = get_account_state()
+    account_state = get_account_state(open_positions=open_spread_positions())
 except Exception as e:
     st.info(f"Live account data unavailable right now ({e}). Showing backtest and log content below.")
 
@@ -58,7 +68,7 @@ if account_state is not None:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Equity", f"${account_state['current_equity']:,.0f}")
     col2.metric("Options buying power", f"${account_state['options_buying_power']:,.0f}")
-    col3.metric("Positions open", f"{n_open} of 4")
+    col3.metric("Positions open", f"{n_open} of {MAX_CONCURRENT_POSITIONS}")
     col4.metric("Options level", account_state["options_approved_level"])
 
     if n_open == 0:
@@ -79,31 +89,44 @@ st.write(
 )
 
 gate_path = "output/data/evidence_gate_results.csv"
-if os.path.exists(gate_path):
-    gate_df = pd.read_csv(gate_path)
-    gate_df["distance"] = (gate_df["distance"] * 100).round(0).astype(int).astype(str) + "%"
-    gate_df["width"] = "$" + gate_df["width"].astype(int).astype(str)
-    display_cols = ["distance", "width", "n", "win_rate", "required_win_rate", "cushion_se", "mean_net_pnl", "passes_gate"]
-    styled = gate_df[display_cols].rename(columns={
-        "n": "weeks", "win_rate": "measured win rate", "required_win_rate": "breakeven win rate",
-        "cushion_se": "cushion (SE)", "mean_net_pnl": "mean P&L/contract", "passes_gate": "clears 2 SE",
-    })
-    st.dataframe(styled, width='stretch', hide_index=True)
+try:
+    if os.path.exists(gate_path):
+        gate_df = pd.read_csv(gate_path)
 
-    survivors = gate_df[gate_df["passes_gate"]]
-    if survivors.empty:
-        st.warning("No (distance, width) cell currently clears the 2-SE bar. The system declines to trade.")
+        # Picks the same cell the live agent would (Rule #3/#5's highest-
+        # cushion tie-break) by calling the actual Picker function instead
+        # of re-implementing its idxmax() logic here -- a second inline copy
+        # previously risked silently diverging from selector.py the moment
+        # a minimum-n eligibility floor or similar filter gets added there.
+        from pipeline.options.selector import choose_distance_width
+
+        choice = choose_distance_width(gate_df)
+
+        display_df = gate_df.copy()
+        display_df["distance"] = (display_df["distance"] * 100).round(0).astype(int).astype(str) + "%"
+        display_df["width"] = "$" + display_df["width"].astype(int).astype(str)
+        display_cols = ["distance", "width", "n", "win_rate", "required_win_rate", "cushion_se", "mean_net_pnl", "passes_gate"]
+        styled = display_df[display_cols].rename(columns={
+            "n": "weeks", "win_rate": "measured win rate", "required_win_rate": "breakeven win rate",
+            "cushion_se": "cushion (SE)", "mean_net_pnl": "mean P&L/contract", "passes_gate": "clears 2 SE",
+        })
+        st.dataframe(styled, width='stretch', hide_index=True)
+
+        n_survivors = int(gate_df["passes_gate"].sum())
+        if choice is None:
+            st.warning("No (distance, width) cell currently clears the 2-SE bar. The system declines to trade.")
+        else:
+            st.success(
+                f"Currently tradable: {choice['distance']:.0%} distance, ${choice['width']:.0f} width "
+                f"-- cushion {choice['cushion_se']:.2f} SE, {n_survivors} cell(s) clear the bar in total."
+            )
     else:
-        best = survivors.loc[gate_df.loc[survivors.index, "cushion_se"].idxmax()]
-        st.success(
-            f"Currently tradable: {best['distance']} distance, {best['width']} width "
-            f"-- cushion {best['cushion_se']:.2f} SE, {len(survivors)} cell(s) clear the bar in total."
+        st.warning(
+            "Evidence gate has not been computed yet. Run `python -m pipeline.backtest.spread_backtest` "
+            "then `python -m pipeline.backtest.evidence_gate`."
         )
-else:
-    st.warning(
-        "Evidence gate has not been computed yet. Run `python -m pipeline.backtest.spread_backtest` "
-        "then `python -m pipeline.backtest.evidence_gate`."
-    )
+except Exception as e:
+    st.error(f"Could not render the evidence gate table ({e}).")
 
 st.divider()
 
@@ -112,12 +135,15 @@ st.divider()
 # ---------------------------------------------------------------------------
 st.subheader("Decision log")
 
-log_df = read_log()
-if log_df.empty:
-    st.write("No decisions logged yet. Every day the agent runs -- including a day it declines to trade -- gets a row here.")
-else:
-    log_df = log_df.sort_values("timestamp", ascending=False)
-    st.dataframe(log_df, width='stretch', hide_index=True)
+try:
+    log_df = read_log()
+    if log_df.empty:
+        st.write("No decisions logged yet. Every day the agent runs -- including a day it declines to trade -- gets a row here.")
+    else:
+        log_df = log_df.sort_values("timestamp", ascending=False)
+        st.dataframe(log_df, width='stretch', hide_index=True)
+except Exception as e:
+    st.error(f"Could not render the decision log ({e}).")
 
 st.divider()
 

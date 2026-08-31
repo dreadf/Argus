@@ -62,10 +62,18 @@ def read_log(path: str = AUDIT_LOG_PATH) -> pd.DataFrame:
         return pd.DataFrame(columns=SCHEMA_FIELDS)
     rows = []
     with open(path) as f:
-        for line in f:
+        for line_no, line in enumerate(f, start=1):
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 rows.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                # A truncated/corrupted line (e.g. a write interrupted by a
+                # killed process) must not take down every reader of this
+                # log -- skip it and warn, rather than raising straight
+                # through to callers like the public dashboard.
+                print(f"WARNING: skipping unparseable audit log line {line_no} in {path}: {e}")
     if not rows:
         return pd.DataFrame(columns=SCHEMA_FIELDS)
     return pd.DataFrame(rows)

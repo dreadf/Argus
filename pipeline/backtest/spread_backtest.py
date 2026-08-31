@@ -210,7 +210,9 @@ if __name__ == "__main__":
     n_weeks = valid["entry"].nunique()
     print(f"{n_weeks} unique non-overlapping entry weeks with at least one valid cell")
 
-    df.to_csv("output/data/spread_backtest_results.csv", index=False)
+    from pipeline.io_utils import atomic_to_csv
+
+    atomic_to_csv(df, "output/data/spread_backtest_results.csv", index=False)
     print("Saved to output/data/spread_backtest_results.csv")
 
     # Reproduce the flagship 3% cell as a spot check.

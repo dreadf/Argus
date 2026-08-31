@@ -86,5 +86,7 @@ if __name__ == "__main__":
         print(f"{len(survivors)} cell(s) clear the 2-SE bar:")
         print(survivors.to_string(index=False))
 
-    gate.to_csv("output/data/evidence_gate_results.csv", index=False)
+    from pipeline.io_utils import atomic_to_csv
+
+    atomic_to_csv(gate, "output/data/evidence_gate_results.csv", index=False)
     print("\nSaved to output/data/evidence_gate_results.csv")
