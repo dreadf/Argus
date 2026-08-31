@@ -91,6 +91,12 @@ def build_reviewer_server() -> FastMCP:
 
     trading_client = httpx.AsyncClient(base_url=trading_base, headers=auth_headers, timeout=30.0)
     data_client = httpx.AsyncClient(base_url=data_base, headers=auth_headers, timeout=30.0)
+    # Neither client is ever closed otherwise -- harmless for the single-shot
+    # `server.run()` lifecycle this file is built for (process exit reclaims
+    # the sockets), but would leak file descriptors if a future caller ever
+    # builds more than one server per process. Stashed here so
+    # aclose_reviewer_server (below) has something real to close.
+    _http_clients = [trading_client, data_client]
 
     main = FastMCP("Alpaca Reviewer (read-only)")
     main.add_middleware(TrustBoundaryMiddleware())
@@ -124,7 +130,17 @@ def build_reviewer_server() -> FastMCP:
     register_market_data_tools(main, data_client)
     register_readme_docs_tools(main)
 
+    main._http_clients = _http_clients
     return main
+
+
+async def aclose_reviewer_server(server: FastMCP) -> None:
+    """Closes the httpx.AsyncClients build_reviewer_server opened. A future
+    caller that builds more than one server per process (or a long-lived
+    reviewer process, per pipeline/agent/reviewer.py's eventual design)
+    should call this on shutdown."""
+    for client in getattr(server, "_http_clients", []):
+        await client.aclose()
 
 
 def main() -> None:

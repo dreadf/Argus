@@ -5,6 +5,8 @@ scipy==1.18.0
 xgboost==3.4.1
 alpaca-py==0.44.0
 alpaca-mcp-server==2.3.0
+fastmcp==3.4.7
+httpx==0.28.1
 streamlit==1.62.0
 python-dotenv==1.2.3
 matplotlib==3.11.1
