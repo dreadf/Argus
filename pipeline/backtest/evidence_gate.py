@@ -88,8 +88,9 @@ def tradable_distances(gate_df: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    results = pd.read_csv("output/data/spread_backtest_results.csv")
-    results["win"] = results["win"].map({"True": True, "False": False, True: True, False: False})
+    from pipeline.io_utils import coerce_win_column
+
+    results = coerce_win_column(pd.read_csv("output/data/spread_backtest_results.csv"))
 
     gate = compute_gate(results)
     pd.set_option("display.width", 160)

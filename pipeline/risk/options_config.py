@@ -54,6 +54,8 @@ DRAWDOWN_SOFT_PCT = 0.05           # Guard #13: stop opening new positions
 DRAWDOWN_HARD_PCT = 0.08           # Guard #14: close everything, halt
 
 PROFIT_TARGET_PCT = 0.50           # monitor.py exit #1: close at this fraction of credit remaining
-EVIDENCE_GATE_SE_THRESHOLD = 2.0   # matches backtest/evidence_gate.py's SE_THRESHOLD
+# The 2-SE evidence-gate bar itself is owned by backtest/evidence_gate.py's
+# SE_THRESHOLD -- this used to be a second, unreferenced copy of the same
+# number here.
 
 FALSE_TRIP_MAX_BLOCKED_WINNERS_PCT = 0.30  # false-trip test bar for any guard/exit rule

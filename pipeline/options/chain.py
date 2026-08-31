@@ -191,7 +191,12 @@ def liquidity_filter(chain_df: pd.DataFrame, min_oi: int = 500, max_spread_pct: 
         & (spread_pct <= max_spread_pct)
         & chain_df["tradable"]
     )
-    return chain_df[liquid].copy()
+    # spread_pct's comparison against a pd.NA mid (from the .replace(0,
+    # pd.NA) above) propagates NA rather than False through `&`, which some
+    # pandas versions reject as a boolean mask -- fillna(False) makes the
+    # "not liquid" outcome explicit rather than relying on how NA happens
+    # to be handled downstream.
+    return chain_df[liquid.fillna(False)].copy()
 
 
 if __name__ == "__main__":

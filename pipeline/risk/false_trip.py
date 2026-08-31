@@ -64,9 +64,9 @@ def false_trip_rate_vol_regime(results_df: pd.DataFrame, spy_closes: pd.Series, 
 
 if __name__ == "__main__":
     from pipeline.backtest.spread_backtest import _load_spy_closes
+    from pipeline.io_utils import coerce_win_column
 
-    results = pd.read_csv("output/data/spread_backtest_results.csv")
-    results["win"] = results["win"].map({"True": True, "False": False, True: True, False: False})
+    results = coerce_win_column(pd.read_csv("output/data/spread_backtest_results.csv"))
     spy_closes = _load_spy_closes()
     spy_closes.index = pd.to_datetime(list(spy_closes.index))
 

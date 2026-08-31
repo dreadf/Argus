@@ -81,7 +81,12 @@ def choose_expiry(today: date, chain_df: pd.DataFrame) -> date | None:
     (not just the theoretical Mon/Wed/Fri calendar), prefer the one closest
     to 7 DTE -- the shortest end of the window, matching the entry/expiry
     cadence the backtest actually tested."""
-    listed_expiries = sorted(chain_df["expiry"].unique())
+    # Defense-in-depth: exclude anything not strictly in the future. The
+    # chain fetch is already scoped to expiries_in_window's forward-looking
+    # dates, so this has no current trigger, but choose_expiry shouldn't
+    # rely on that upstream scoping alone to keep it from ever proposing a
+    # stale/expired date.
+    listed_expiries = sorted(e for e in chain_df["expiry"].unique() if (e - today).days >= 0)
     if not listed_expiries:
         return None
     return min(listed_expiries, key=lambda e: (e - today).days)

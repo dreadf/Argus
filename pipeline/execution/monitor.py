@@ -73,7 +73,15 @@ def evaluate_position(position: dict, today: date, current_short_mid: float | No
         return {"action": "hold", "reason": "no live quote this cycle, cannot evaluate profit target"}
 
     current_buyback_cost = current_short_mid - current_long_mid
+    # position["credit_per_contract"] is dollars-per-contract (the same unit
+    # selector.py's credit_per_contract = credit_per_share * 100 produces
+    # and run_agent.py logs verbatim) -- /100 recovers the per-share credit
+    # so it's comparable to current_short_mid/current_long_mid, which are
+    # always per-share. Asserted rather than just commented, since this
+    # project has already been bitten twice by an unstated unit assumption
+    # silently drifting.
     credit_received = position["credit_per_contract"] / 100
+    assert 0 <= credit_received < 100, f"credit_received {credit_received} outside a plausible per-share range -- check credit_per_contract's unit"
     if current_buyback_cost <= risk_cfg.PROFIT_TARGET_PCT * credit_received:
         return {
             "action": "close_profit_target",
@@ -120,15 +128,13 @@ def build_emergency_single_leg_close(symbol: str, contracts: int, held_side: str
     """`held_side` is 'short' (we sold it, need to BUY_TO_CLOSE) or 'long'
     (we bought it, need to SELL_TO_CLOSE). Single-leg market order, no
     order_class needed -- this isn't a spread, it's the orphan alone."""
-    from alpaca.trading.requests import MarketOrderRequest as SingleLegMarketOrderRequest
-
     if held_side == "short":
         side, intent = OrderSide.BUY, PositionIntent.BUY_TO_CLOSE
     elif held_side == "long":
         side, intent = OrderSide.SELL, PositionIntent.SELL_TO_CLOSE
     else:
         raise ValueError(f"held_side must be 'short' or 'long', got {held_side!r}")
-    return SingleLegMarketOrderRequest(symbol=symbol, qty=contracts, side=side, time_in_force=TimeInForce.DAY, position_intent=intent)
+    return MarketOrderRequest(symbol=symbol, qty=contracts, side=side, time_in_force=TimeInForce.DAY, position_intent=intent)
 
 
 def _raw_qty(raw_positions: list, symbol: str, side) -> int:
