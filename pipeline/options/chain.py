@@ -58,35 +58,46 @@ def get_spot(symbol: str = UNDERLYING) -> float:
 def _fetch_contracts(
     symbol: str, expiry_dates: list[date], strike_lo: float, strike_hi: float
 ) -> pd.DataFrame:
-    """Reference data: strike, expiry, open interest. Paginates internally."""
+    """Reference data: strike, expiry, open interest. Paginates internally
+    on next_page_token -- confirmed live that a single narrow strike-band
+    query can return exactly 100 rows (the page size) with a non-null
+    next_page_token still outstanding, meaning a version of this function
+    that stopped after one request could silently truncate the chain."""
     rows = []
     for expiry in expiry_dates:
-        request = GetOptionContractsRequest(
-            underlying_symbols=[symbol],
-            expiration_date=expiry,
-            strike_price_gte=str(strike_lo),
-            strike_price_lte=str(strike_hi),
-            # The Alpaca API defaults to calls only when `type` is omitted --
-            # confirmed empirically (an unfiltered request returned 200 calls
-            # and 0 puts). This strategy only ever trades put credit spreads,
-            # so puts are the only thing worth asking for.
-            type=ContractType.PUT,
-        )
-        result = _retry(
-            lambda r=request: _trading_client.get_option_contracts(r),
-            f"get_option_contracts({expiry})",
-        )
-        for c in result.option_contracts:
-            rows.append(
-                {
-                    "symbol": c.symbol,
-                    "expiry": c.expiration_date,
-                    "right": "C" if str(c.type).lower().endswith("call") else "P",
-                    "strike": float(c.strike_price),
-                    "open_interest": int(c.open_interest) if c.open_interest is not None else 0,
-                    "tradable": bool(c.tradable),
-                }
+        page_token = None
+        while True:
+            request = GetOptionContractsRequest(
+                underlying_symbols=[symbol],
+                expiration_date=expiry,
+                strike_price_gte=str(strike_lo),
+                strike_price_lte=str(strike_hi),
+                # The Alpaca API defaults to calls only when `type` is omitted --
+                # confirmed empirically (an unfiltered request returned 200 calls
+                # and 0 puts). This strategy only ever trades put credit spreads,
+                # so puts are the only thing worth asking for.
+                type=ContractType.PUT,
+                page_token=page_token,
             )
+            result = _retry(
+                lambda r=request: _trading_client.get_option_contracts(r),
+                f"get_option_contracts({expiry}, page_token={page_token})",
+            )
+            for c in result.option_contracts:
+                rows.append(
+                    {
+                        "symbol": c.symbol,
+                        "expiry": c.expiration_date,
+                        "right": "C" if str(c.type).lower().endswith("call") else "P",
+                        "strike": float(c.strike_price),
+                        "open_interest": int(c.open_interest) if c.open_interest is not None else 0,
+                        "tradable": bool(c.tradable),
+                    }
+                )
+            page_token = result.next_page_token
+            if not page_token:
+                break
+            time.sleep(0.3)
         time.sleep(0.3)
     return pd.DataFrame(rows)
 
