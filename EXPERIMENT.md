@@ -426,7 +426,18 @@ Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set
 
 **What this replaces:** every "1.8 SE, below the bar" and "provisional" framing throughout `OPTIONS_SYSTEM_PLAN.md`, `PROGRESS.md`, and the draft submission copy in Part 0B is now superseded by this measurement. Those documents still describe the *reasoning* correctly (the evidence-gate method, the conservative breakeven formula); only the specific numbers were provisional, and this entry is what they were provisional pending.
 
-**Known limitations, stated rather than hidden:** entry priced at bar close and settlement at intrinsic value are assumptions, not universal facts -- no slippage is modeled here (the plan's cost sweep for that is a separate, not-yet-run step). Option history covers Feb 2024 onward, roughly one broad market regime, the same single-regime weakness flagged in Experiment 6d. 151 of 3,072 cells were dropped for missing data, concentrated in deep-OTM, thin-volume contracts; this does not affect the 3% distance result materially (124-126 of 128 candidate weeks had valid data at every width tested there).
+**Known limitations, stated rather than hidden:** entry priced at bar close and settlement at intrinsic value are assumptions, not universal facts. Option history covers Feb 2024 onward, roughly one broad market regime, the same single-regime weakness flagged in Experiment 6d. 151 of 3,072 cells were dropped for missing data, concentrated in deep-OTM, thin-volume contracts; this does not affect the 3% distance result materially (124-126 of 128 candidate weeks had valid data at every width tested there). The retry logic that produces those missing-data rows was audited and fixed after an initial bug-hunt round found it could have silently mislabeled a real API failure as missing data; the backtest was re-run afterward and every number in the table above (missing-data count, win rates, cushions) is unchanged, confirming the 151 dropped cells really are thin liquidity, not a masked outage.
+
+**Addendum -- the slippage sweep, run:** the cost sweep flagged above as "not-yet-run" has since been added (`spread_backtest.run_backtest`'s `slippage_per_share` parameter, a flat per-share haircut on every trade). The flagship cushions above assume **zero** slippage; here is how they move under a realistic cost:
+
+| Haircut/share | $1 width cushion (SE) | $2 width cushion (SE) | $5 width cushion (SE) |
+|---|---|---|---|
+| $0.00 (table above) | 3.28 | 2.97 | 2.28 |
+| $0.02 | 1.81 (fails) | 2.24 | 1.99 (fails) |
+| $0.05 | -0.40 (net underpaid) | 1.13 (fails) | 1.55 (fails) |
+| $0.10 | -4.08, net loss-making | -0.71 | 0.81 |
+
+Real bid-ask spreads on these exact far-OTM SPY puts, checked live, run $0.01-$0.05 wide -- the same order of magnitude as the entire measured edge (average credit at 3%/$1 width is $0.068/share). The $1-width cell does not survive an ordinary $0.02/share cost; the $2 and $5 cells are more robust but not untouched. The directional claim ("at 3% distance the market overpays") still holds at every cost level tested, but the specific "clears 2 SE" framing above should be read as cost-free, not final.
 
 ---
 
