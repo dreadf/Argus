@@ -19,7 +19,7 @@ from datetime import date
 import pandas as pd
 from alpaca.data.historical.option import OptionHistoricalDataClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
-from alpaca.data.requests import OptionChainRequest, StockLatestTradeRequest
+from alpaca.data.requests import OptionChainRequest, OptionLatestQuoteRequest, StockLatestTradeRequest
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import ContractType
 from alpaca.trading.requests import GetOptionContractsRequest
@@ -148,6 +148,23 @@ def fetch_chain(
     snapshots = _fetch_snapshots(expiry_dates, strike_lo, strike_hi)
     merged = contracts.merge(snapshots, on="symbol", how="left")
     return merged
+
+
+def fetch_option_mids(symbols: list[str]) -> dict[str, float | None]:
+    """Live mid price for a small, known set of option symbols -- used by
+    monitor.py to re-price an already-open spread every cycle, where the
+    full chain fetch (fetch_chain) would be needlessly wide."""
+    if not symbols:
+        return {}
+    request = OptionLatestQuoteRequest(symbol_or_symbols=symbols)
+    quotes = _retry(lambda: _option_data_client.get_option_latest_quote(request), "get_option_latest_quote")
+    mids = {}
+    for sym in symbols:
+        quote = quotes.get(sym)
+        bid = float(quote.bid_price) if quote and quote.bid_price else None
+        ask = float(quote.ask_price) if quote and quote.ask_price else None
+        mids[sym] = (bid + ask) / 2 if bid is not None and ask is not None else None
+    return mids
 
 
 def liquidity_filter(chain_df: pd.DataFrame, min_oi: int = 500, max_spread_pct: float = 0.15) -> pd.DataFrame:

@@ -4,6 +4,13 @@ position. Alpaca accepts MARKET and LIMIT only on multi-leg option orders
 (no broker-side brackets/stops), so every exit rule in the plan is fiction
 unless something actively polls and acts (OPTIONS_SYSTEM_PLAN.md Part 8).
 
+run_once() (below) is the entry point a scheduler must invoke on a timer --
+this file does not schedule itself. Wire a cron entry (or systemd timer)
+during market hours, e.g.:
+  */15 9-16 * * 1-5 cd /path/to/repo && python -m pipeline.execution.monitor --run --dry-run
+Flip to --live only after Tuesday's 1-contract MANUAL smoke test confirms
+the order-submission path end to end.
+
 Four checks, in priority order (Part 6's exit-rule table):
   1. One leg orphaned -> emergency close, at market, immediately. The only
      scenario that can exceed the stated max loss.
@@ -21,7 +28,7 @@ check on the profit-target and day-before-expiry rules.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from alpaca.trading.enums import OrderClass, OrderSide, PositionIntent, TimeInForce
 from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest, OptionLegRequest
@@ -37,12 +44,19 @@ def evaluate_position(position: dict, today: date, current_short_mid: float | No
     short_qty = position.get("short_qty", 0)
     long_qty = position.get("long_qty", 0)
 
-    if (short_qty > 0) != (long_qty > 0):
-        orphan_leg = "short" if short_qty > 0 else "long"
+    if short_qty != long_qty:
+        # Catches both a fully one-sided fill (one leg 0) and a partial
+        # mismatch (e.g. short_qty=6, long_qty=3) -- the more realistic
+        # failure mode on a multi-contract MLEG order that only partially
+        # fills. Either way the protective leg no longer covers every
+        # contract of the exposed leg, so the stated max loss no longer
+        # holds and this must close immediately, not just when one side is
+        # fully empty.
+        orphan_leg = "short" if short_qty > long_qty else "long"
         return {
             "action": "emergency_close_orphan",
             "orphan_leg": orphan_leg,
-            "reason": f"only the {orphan_leg} leg is held -- structural loss cap no longer holds, close immediately",
+            "reason": f"leg quantities mismatched (short={short_qty}, long={long_qty}) -- structural loss cap no longer holds, close immediately",
         }
 
     if short_qty == 0 and long_qty == 0:
@@ -117,6 +131,113 @@ def build_emergency_single_leg_close(symbol: str, contracts: int, held_side: str
     return SingleLegMarketOrderRequest(symbol=symbol, qty=contracts, side=side, time_in_force=TimeInForce.DAY, position_intent=intent)
 
 
+def _raw_qty(raw_positions: list, symbol: str, side) -> int:
+    for p in raw_positions:
+        if p.symbol == symbol and p.side == side:
+            return int(float(p.qty))
+    return 0
+
+
+def run_once(dry_run: bool = True, today: date | None = None) -> dict:
+    """Item 1's fix: this is the function a scheduler must call every ~15
+    minutes during market hours (cron/systemd timer -- see the module
+    docstring). Without something invoking this on a timer, every exit rule
+    above is unreachable code: the Picker can open a position, but nothing
+    ever closes one.
+
+    Reads open spreads from the audit log (pipeline.execution.positions,
+    same discipline as run_agent.py's account/position handling -- never
+    trust the broker's raw Position objects for this system's synthetic
+    risk fields), re-prices each against live quotes, evaluates every exit
+    rule, and submits + logs any resulting close. Every cycle is logged,
+    including a cycle where nothing happens, so a monitor outage is
+    visible in the audit trail rather than silent.
+    """
+    from alpaca.trading.enums import PositionSide
+
+    from pipeline.audit.log import append_entry
+    from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
+    from pipeline.execution.positions import open_spread_positions
+    from pipeline.options.chain import fetch_option_mids
+    from pipeline.options.contracts import parse_occ_symbol
+
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+
+    clock = get_clock()
+    if not clock["market_open"]:
+        return {"outcome": "SKIPPED", "reason": "market closed", "closed": []}
+
+    client = get_trading_client()
+    positions = open_spread_positions()
+    if not positions:
+        return {"outcome": "NO_OPEN_POSITIONS", "closed": []}
+
+    account = get_account_state(open_positions=positions)
+    raw_positions = account["raw_positions"]
+
+    closed = []
+
+    account_action = evaluate_account({"current_equity": account["current_equity"], "peak_equity": account["peak_equity"]})
+    force_close_all = account_action["action"] == "close_everything_halt"
+
+    for position in positions:
+        short_qty = _raw_qty(raw_positions, position["short_symbol"], PositionSide.SHORT)
+        long_qty = _raw_qty(raw_positions, position["long_symbol"], PositionSide.LONG)
+        # expiry isn't stored in the audit log separately -- it's parsed
+        # straight from the OCC symbol (contracts.parse_occ_symbol), the
+        # same encoding build_occ_symbol used to construct it at open time.
+        expiry = parse_occ_symbol(position["short_symbol"])["expiry"]
+        position = {**position, "short_qty": short_qty, "long_qty": long_qty, "expiry": expiry}
+
+        if short_qty == 0 and long_qty == 0:
+            continue  # already flat (closed outside this loop, or never actually filled)
+
+        if force_close_all:
+            action_result = {"action": "close_everything_halt", "reason": account_action["reason"]}
+        else:
+            mids = fetch_option_mids([position["short_symbol"], position["long_symbol"]])
+            action_result = evaluate_position(
+                position, today,
+                current_short_mid=mids.get(position["short_symbol"]),
+                current_long_mid=mids.get(position["long_symbol"]),
+            )
+
+        if action_result["action"] == "hold":
+            continue
+
+        if action_result["action"] == "emergency_close_orphan":
+            held_side = action_result["orphan_leg"]
+            symbol = position["short_symbol"] if held_side == "short" else position["long_symbol"]
+            # Only the uncovered excess needs an emergency close -- a
+            # matched portion (e.g. 3 of 6 short contracts still paired with
+            # 3 long contracts) is still a valid, bounded spread.
+            qty = abs(short_qty - long_qty)
+            order_request = build_emergency_single_leg_close(symbol, qty, held_side)
+        else:
+            order_request = build_close_order(position)
+
+        summary = f"CLOSE {position['short_symbol']}/{position['long_symbol']} ({action_result['action']}: {action_result['reason']})"
+        if dry_run:
+            print(f"[DRY RUN] Would submit: {summary}")
+            order_result = None
+        else:
+            print(f"[LIVE] Submitting: {summary}")
+            order_result = client.submit_order(order_request)
+
+        append_entry({
+            "mode": "MANUAL" if dry_run else "AUTO",
+            "short_symbol": position["short_symbol"], "long_symbol": position["long_symbol"],
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
+            "outcome": "DRY_RUN" if dry_run else "CLOSED",
+            "close_reason": action_result["action"],
+            "order_id": str(order_result.id) if order_result is not None else None,
+        })
+        closed.append({"position": position, "action": action_result["action"]})
+
+    return {"outcome": "OK", "closed": closed}
+
+
 if __name__ == "__main__":
     today = date(2026, 9, 1)
 
@@ -148,6 +269,14 @@ if __name__ == "__main__":
     assert orphan_result["action"] == "emergency_close_orphan" and orphan_result["orphan_leg"] == "short"
     print(f"Orphaned short leg (dangerous): {orphan_result}")
 
+    # 4b. Partial-fill mismatch: short=6, long=3 -- the more realistic
+    # failure mode on a multi-contract MLEG order that only partially
+    # fills. Must still be caught (item 11 fix), not just a fully one-sided fill.
+    partial = {**base_position, "short_qty": 6, "long_qty": 3}
+    partial_result = evaluate_position(partial, today, current_short_mid=0.20, current_long_mid=0.05)
+    assert partial_result["action"] == "emergency_close_orphan" and partial_result["orphan_leg"] == "short"
+    print(f"Partial-fill mismatch (short=6, long=3): {partial_result}")
+
     # 5. Hard drawdown.
     drawdown_state = {"current_equity": 92_000.0, "peak_equity": 100_000.0}
     dd = evaluate_account(drawdown_state)
@@ -167,3 +296,22 @@ if __name__ == "__main__":
     print("build_emergency_single_leg_close: correct single-leg BUY_TO_CLOSE for an orphaned short")
 
     print("\nAll monitor.py self-checks passed.")
+
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Item 1's fix: this must run on a schedule (e.g. a cron "
+        "entry like '*/15 9-16 * * 1-5 cd /path/to/repo && python -m "
+        "pipeline.execution.monitor --run --dry-run' during market hours) "
+        "for any exit rule above to ever actually fire against a live "
+        "position. Self-checks above always run first regardless of flags."
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--dry-run", action="store_true", default=True)
+    group.add_argument("--live", dest="dry_run", action="store_false")
+    parser.add_argument("--run", action="store_true", help="poll the broker and evaluate real open positions (skipped by default -- self-checks only)")
+    args = parser.parse_args()
+
+    if args.run:
+        cycle_result = run_once(dry_run=args.dry_run)
+        print(f"\nMonitor cycle: {cycle_result}")
