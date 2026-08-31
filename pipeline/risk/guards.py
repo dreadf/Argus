@@ -121,6 +121,17 @@ def check_liquidity(state: dict, proposal: dict) -> tuple[bool, str]:
             return False, f"{leg} leg open interest {oi} below {cfg.MIN_OPEN_INTEREST}"
         if spread_pct is None or spread_pct > cfg.MAX_BID_ASK_SPREAD_PCT:
             return False, f"{leg} leg bid-ask spread {spread_pct} exceeds {cfg.MAX_BID_ASK_SPREAD_PCT:.0%} of mid"
+        # The floor above only checks OI clears an absolute minimum,
+        # independent of how many contracts this specific order wants.
+        # size_contracts sizes purely off equity-based dollar caps with no
+        # reference to quoted depth, so a large-enough account could
+        # otherwise propose more contracts than the market can realistically
+        # absorb (item 24: crosses the OI floor itself past ~$1.08M equity
+        # on the narrowest tested width).
+        contracts = proposal.get("contracts", 0)
+        max_contracts = oi * cfg.MAX_CONTRACTS_PCT_OF_OPEN_INTEREST
+        if contracts > max_contracts:
+            return False, f"{leg} leg order size {contracts} exceeds {cfg.MAX_CONTRACTS_PCT_OF_OPEN_INTEREST:.0%} of open interest {oi} ({max_contracts:.0f})"
     return True, "both legs liquid"
 
 

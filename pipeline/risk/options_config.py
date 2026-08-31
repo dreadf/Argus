@@ -37,6 +37,15 @@ MAX_DTE = 11                       # Guard #9
 
 MIN_OPEN_INTEREST = 500            # Guard #11
 MAX_BID_ASK_SPREAD_PCT = 0.15      # Guard #11
+# Guard #11 extension: order size must also stay a small fraction of quoted
+# depth, not just clear the absolute open-interest floor above. Without
+# this, size_contracts (which sizes purely off equity-based dollar caps) can
+# propose more contracts than the market can realistically absorb once
+# equity is large enough -- worked out by hand that this crosses the
+# MIN_OPEN_INTEREST floor itself at roughly $1.08M equity on the narrowest
+# evidence-gate-tested width. 10% of open interest is a conservative,
+# round-number ceiling; nothing in Experiment 11 depends on the exact value.
+MAX_CONTRACTS_PCT_OF_OPEN_INTEREST = 0.10
 
 VOL_REGIME_RV_THRESHOLD = 0.25     # Guard #12: annualized RV(10d) above this = skip
 SPY_DAILY_MOVE_THRESHOLD = 0.02    # Guard #12: yesterday's |move| above this = skip
