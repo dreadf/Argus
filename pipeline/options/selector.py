@@ -47,6 +47,21 @@ def _nearest_listed_strike_at_or_beyond(strikes: pd.Series, target: float) -> fl
     return float(candidates.max())
 
 
+def _nearest_listed_strike_at_or_above(strikes: pd.Series, target: float) -> float | None:
+    """For the long (protective) leg only: the smallest listed strike that
+    does not go below target, i.e. never further from the short strike than
+    the configured width. Reusing _nearest_listed_strike_at_or_beyond here
+    (as an earlier version did) rounds the WRONG way for this leg -- it
+    picks the largest strike <= target, which on a grid that doesn't line
+    up exactly only ever widens the realized spread beyond what the
+    evidence gate measured, silently breaking the "only trade what was
+    measured" guarantee this system is otherwise built on."""
+    candidates = strikes[strikes >= target]
+    if candidates.empty:
+        return None
+    return float(candidates.min())
+
+
 def choose_strikes(chain_df: pd.DataFrame, spot: float, distance: float, width: float) -> dict | None:
     listed = chain_df["strike"].unique()
     listed = pd.Series(listed)
@@ -55,7 +70,7 @@ def choose_strikes(chain_df: pd.DataFrame, spot: float, distance: float, width: 
     if short_strike is None:
         return None
     target_long = short_strike - width
-    long_strike = _nearest_listed_strike_at_or_beyond(listed, target_long)
+    long_strike = _nearest_listed_strike_at_or_above(listed, target_long)
     if long_strike is None or long_strike >= short_strike:
         return None
     return {"short_strike": short_strike, "long_strike": long_strike}
