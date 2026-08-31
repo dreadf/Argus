@@ -33,8 +33,14 @@ def false_trip_rate_credit_width(results_df: pd.DataFrame, distance: float, widt
 
 
 def false_trip_rate_vol_regime(results_df: pd.DataFrame, spy_closes: pd.Series, distance: float, width: float) -> dict:
-    rv_series = realized_vol_series(spy_closes, window=10)
-    daily_move = spy_closes.pct_change()
+    # .shift(1): the live guard (run_agent.py) computes rv_10d and
+    # spy_yesterday_move_pct from closes fetched BEFORE today's decision --
+    # i.e. using the prior trading day's close, never today's own close,
+    # which isn't available yet at decision time. Evaluating this replay at
+    # the entry date's own close (no shift) was a one-day lookahead: it let
+    # the guard "see" data from the same day it's supposedly deciding on.
+    rv_series = realized_vol_series(spy_closes, window=10).shift(1)
+    daily_move = spy_closes.pct_change().shift(1)
 
     cell = results_df[(results_df["distance"] == distance) & (results_df["width"] == width) & (~results_df["missing_data"])].copy()
     cell["entry"] = pd.to_datetime(cell["entry"]).dt.date
