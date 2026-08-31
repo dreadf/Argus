@@ -80,7 +80,13 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         print(f"Already decided today ({today}) -- idempotent no-op, nothing re-evaluated.")
         return {"outcome": "ALREADY_DECIDED", "date": today}
 
-    clock = get_clock()
+    try:
+        clock = get_clock()
+    except Exception as e:
+        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+                      "guards_failed": [f"get_clock failed: {e}"]})
+        print(f"get_clock failed ({e}). Logged SKIP.")
+        return {"outcome": "SKIPPED", "reason": f"get_clock failed: {e}"}
     if not clock["market_open"]:
         row = append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                              "guards_failed": ["check_market_open"]})
@@ -94,14 +100,27 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         return {"outcome": "SKIPPED", "reason": "no evidence gate"}
     gate_df = pd.read_csv(GATE_PATH)
 
-    account = get_account_state(peak_equity=_load_peak_equity(), open_positions=open_spread_positions())
-    spot = get_spot()
-    closes = fetch_recent_closes()
-    rv_10d = realized_vol(closes, 10)
-    spy_yesterday_move_pct = float(closes.pct_change().iloc[-1])
+    # None of these are wrapped individually -- a fresh account/date range
+    # raises inside realized_vol (fewer than 11 closes), .iloc[-1] raises on
+    # 0-1 rows, and every network call here can raise on a transient API
+    # failure. Without this try/except, any of those crashes the session
+    # with zero audit row written, breaking both the "every day, including
+    # failures, gets logged" principle and _already_decided_today()'s
+    # ability to recognize the day was handled (item 9).
+    try:
+        account = get_account_state(peak_equity=_load_peak_equity(), open_positions=open_spread_positions())
+        spot = get_spot()
+        closes = fetch_recent_closes()
+        rv_10d = realized_vol(closes, 10)
+        spy_yesterday_move_pct = float(closes.pct_change().iloc[-1])
 
-    exps = expiries_in_window(today, risk_cfg.MIN_DTE, risk_cfg.MAX_DTE)
-    chain_df = fetch_chain(exps, spot=spot)
+        exps = expiries_in_window(today, risk_cfg.MIN_DTE, risk_cfg.MAX_DTE)
+        chain_df = fetch_chain(exps, spot=spot)
+    except Exception as e:
+        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+                      "guards_failed": [f"data/account fetch failed: {e}"]})
+        print(f"Data or account fetch failed ({e}). Logged SKIP.")
+        return {"outcome": "SKIPPED", "reason": f"fetch failed: {e}"}
 
     proposal = select_spread(chain_df, spot, gate_df, account, today=today)
     if proposal is None:
