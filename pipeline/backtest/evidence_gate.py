@@ -23,11 +23,17 @@ def _cushion_for_cell(cell: pd.DataFrame) -> dict:
         return None
     win_rate = cell["win"].mean()
     avg_credit = cell["credit"].mean()
+    # net_credit (credit minus any per-share slippage haircut, see
+    # spread_backtest.py's slippage_per_share) may not exist on older CSVs;
+    # fall back to gross credit, matching the pre-cost-model behavior.
+    avg_net_credit = cell["net_credit"].mean() if "net_credit" in cell else avg_credit
     width = cell["width"].iloc[0]
     # Breakeven win rate assuming every loss is a max loss (conservative --
     # Part 2B notes the real backtest P&L, used below via mean_net_pnl, is
-    # the less conservative and more trustworthy number).
-    required_win_rate = 1 - (avg_credit / width)
+    # the less conservative and more trustworthy number). Uses net_credit so
+    # a nonzero slippage haircut raises the bar a real trade would have to
+    # clear, not just the theoretical gross-quote one (Headline finding 1).
+    required_win_rate = 1 - (avg_net_credit / width)
     se = math.sqrt(win_rate * (1 - win_rate) / n) if 0 < win_rate < 1 else 0.0
     cushion_pp = win_rate - required_win_rate
     cushion_se = (cushion_pp / se) if se > 0 else float("inf") if cushion_pp > 0 else float("-inf")

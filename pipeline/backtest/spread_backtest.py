@@ -71,6 +71,17 @@ def _round_away_from_spot(spot: float, distance: float) -> int:
 
 
 def _fetch_bar_closes(symbols: list[str], on_date: date) -> dict[str, float]:
+    """A real "no data for this symbol" response comes back as an empty 200
+    body (no exception at all -- see the `df.empty` check below). So any
+    exception here is a genuine API problem (auth, outage, malformed
+    request), not missing data, and must not be swallowed: retry, then raise
+    after exhausting attempts, matching chain.py's `_retry` pattern. An
+    earlier version string-matched "empty"/"404" in the exception text to
+    decide whether to treat a failure as missing data -- confirmed via a
+    deliberate bad-credentials test that a real 401 auth error contains
+    neither substring, so it fell through to the same silent `return {}` as
+    legitimate missing data, making a systematic outage indistinguishable
+    from real thin liquidity in the backtest's own output."""
     if not symbols:
         return {}
     request = OptionBarsRequest(
@@ -79,18 +90,17 @@ def _fetch_bar_closes(symbols: list[str], on_date: date) -> dict[str, float]:
         start=pd.Timestamp(on_date),
         end=pd.Timestamp(on_date) + pd.Timedelta(days=1),
     )
+    df = None
     for attempt in range(MAX_RETRIES):
         try:
             df = _option_data_client.get_option_bars(request).df
             break
         except Exception as e:
-            if "empty" in str(e).lower() or "404" in str(e):
-                return {}
             wait = 5 * (attempt + 1)
             print(f"  get_option_bars({on_date}) failed ({e}), retrying in {wait}s...")
             time.sleep(wait)
     else:
-        return {}
+        raise RuntimeError(f"get_option_bars({on_date}) failed {MAX_RETRIES} times in a row")
     if df.empty:
         return {}
     return {sym: float(df.loc[sym].iloc[0]["close"]) for sym in df.index.get_level_values("symbol").unique()}
@@ -101,7 +111,14 @@ def run_backtest(
     end: date | None = None,
     distances: tuple[float, ...] = DISTANCE_TARGETS,
     widths: tuple[int, ...] = WIDTH_TARGETS,
+    slippage_per_share: float = 0.0,
 ) -> pd.DataFrame:
+    """`slippage_per_share`: a flat per-share haircut subtracted from every
+    trade's credit, modeling the cost of crossing the bid-ask spread on both
+    legs (Headline finding 1: this backtest previously had no cost model at
+    all, despite OPTIONS_SYSTEM_PLAN.md describing one as if it existed; real
+    quoted spreads on these far-OTM SPY puts run $0.01-$0.05 wide, the same
+    order of magnitude as the flagship cell's average $0.068/share credit)."""
     closes = _load_spy_closes()
     if end is None:
         end = closes.index.max()
@@ -152,16 +169,17 @@ def run_backtest(
                 continue
 
             credit = short_close - long_close
+            net_credit = credit - slippage_per_share
             intrinsic_short = max(0.0, short_strike - spy_expiry)
             intrinsic_long = max(0.0, long_strike - spy_expiry)
             payout_owed = intrinsic_short - intrinsic_long
-            net_pnl = credit - payout_owed
+            net_pnl = net_credit - payout_owed
             rows.append(
                 {
                     "entry": entry, "expiry": expiry, "distance": distance, "width": width,
                     "spot_entry": spot_entry, "spy_expiry": spy_expiry,
                     "short_strike": short_strike, "long_strike": long_strike,
-                    "credit": credit, "payout_owed": payout_owed, "net_pnl": net_pnl,
+                    "credit": credit, "net_credit": net_credit, "payout_owed": payout_owed, "net_pnl": net_pnl,
                     "win": payout_owed <= 1e-9, "missing_data": False,
                 }
             )
