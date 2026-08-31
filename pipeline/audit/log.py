@@ -28,11 +28,12 @@ SCHEMA_FIELDS = [
     "current_equity", "peak_equity",
     "spy_price", "vol_forecast",
     "gate_distance", "gate_cushion_se",
+    "short_symbol", "long_symbol", "net_delta_share_equiv",
     "proposed_contracts", "proposed_credit", "proposed_max_loss",
     "guards_checked", "guards_failed", "budget_remaining",
     "reviewer_decision", "reviewer_multiplier", "reviewer_reason",
     "human_action", "order_id", "fill_price", "both_legs_confirmed",
-    "outcome", "realized_pnl",
+    "outcome", "realized_pnl", "close_reason",
 ]
 
 
