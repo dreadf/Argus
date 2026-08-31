@@ -16,6 +16,14 @@ import pandas as pd
 
 SE_THRESHOLD = 2.0
 
+# A cell needs at least this many non-overlapping weeks to be gate-eligible
+# at all, regardless of its cushion. Without this floor, a thin, zero-loss
+# corner cell (win_rate == 1.0, raw SE == 0) could win choose_distance_width's
+# idxmax() purely on an infinite cushion_se, ahead of every real, well-tested
+# cell -- not yet triggered in the current sweep (closest is 0.9917 at
+# 5%/$1, n=120) but one re-run or one added distance away.
+MIN_N_FOR_GATE = 30
+
 
 def _cushion_for_cell(cell: pd.DataFrame) -> dict:
     n = len(cell)
@@ -34,9 +42,19 @@ def _cushion_for_cell(cell: pd.DataFrame) -> dict:
     # a nonzero slippage haircut raises the bar a real trade would have to
     # clear, not just the theoretical gross-quote one (Headline finding 1).
     required_win_rate = 1 - (avg_net_credit / width)
-    se = math.sqrt(win_rate * (1 - win_rate) / n) if 0 < win_rate < 1 else 0.0
+    if 0 < win_rate < 1:
+        se = math.sqrt(win_rate * (1 - win_rate) / n)
+    else:
+        # Continuity-corrected estimate (as if one extra observation went
+        # the other way) instead of the raw formula's se=0 at a perfect
+        # win rate -- se=0 previously forced cushion_se to a hardcoded
+        # +/-inf, which is not a real statistic and would always win (or
+        # lose) a comparison against every finite, genuinely measured cell.
+        p_adj = (cell["win"].sum() + 0.5) / (n + 1)
+        se = math.sqrt(p_adj * (1 - p_adj) / n)
     cushion_pp = win_rate - required_win_rate
-    cushion_se = (cushion_pp / se) if se > 0 else float("inf") if cushion_pp > 0 else float("-inf")
+    cushion_se = cushion_pp / se if se > 0 else 0.0
+    eligible = n >= MIN_N_FOR_GATE
     return {
         "distance": cell["distance"].iloc[0],
         "width": width,
@@ -47,9 +65,8 @@ def _cushion_for_cell(cell: pd.DataFrame) -> dict:
         "se": se,
         "cushion_pp": cushion_pp,
         "cushion_se": cushion_se,
-        "mean_net_pnl": cell["net_pnl"].mean(),
-        "total_net_pnl": cell["net_pnl"].sum(),
-        "passes_gate": cushion_se >= SE_THRESHOLD,
+        "eligible": eligible,
+        "passes_gate": eligible and cushion_se >= SE_THRESHOLD,
     }
 
 
