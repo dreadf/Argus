@@ -30,7 +30,15 @@ def _quarterly_chunks(start_date, end_date):
 
     chunks = []
     for i in range(len(bounds) - 1):
-        chunks.append((bounds[i], bounds[i + 1]))
+        chunk_start = bounds[i]
+        # Consecutive chunks previously shared an exact boundary timestamp
+        # (chunk i's end == chunk i+1's start), risking a double-fetched
+        # article published at that exact instant -- masked downstream by
+        # the dedup in panel.py's add_news_features, but present in the raw
+        # fetched file. Subtracting 1 second from every end except the very
+        # last one makes the ranges genuinely non-overlapping.
+        chunk_end = bounds[i + 1] if i == len(bounds) - 2 else bounds[i + 1] - pd.Timedelta(seconds=1)
+        chunks.append((chunk_start, chunk_end))
     return chunks
 
 

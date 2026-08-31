@@ -25,7 +25,11 @@ def run_pooled_xgb():
         'volatility_5_mkt', 'volatility_10_mkt', 'RSI_mkt',
     ]
     feature_columns=[col for col in panel_data.columns if col not in exclude]
-    target_columns=['relative_target']
+    # A plain string, not a single-element list -- df[target] with a list
+    # returns a DataFrame instead of a Series (harmless with XGBClassifier
+    # today, but inconsistent with every sibling script here, which all
+    # index the target as a Series via a plain column-name string).
+    target_columns='relative_target'
 
     x_test, y_test = get_x_y(test_df, feature_columns, target_columns)
     x_train, y_train = get_x_y(train_df, feature_columns, target_columns)

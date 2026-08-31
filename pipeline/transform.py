@@ -35,6 +35,12 @@ def engineer_features(symbol):
     # Then we calculate the RS
     stock_df['RS'] = stock_df['gains']/stock_df['losses']
     stock_df['RSI'] = 100 - (100/(1+stock_df['RS']))
+    # A perfectly flat 14-day window (no gains, no losses) makes RS = 0/0 =
+    # NaN, which silently drops the whole row downstream at dropna() instead
+    # of describing what actually happened: no movement at all, which is
+    # the conventional definition of a neutral (50) RSI, not missing data.
+    flat_window = (stock_df['gains'] == 0) & (stock_df['losses'] == 0)
+    stock_df.loc[flat_window, 'RSI'] = 50.0
 
     # Forward 5D Return
     # This is what the model is trying to predict, so we're basically making the target feature

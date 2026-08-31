@@ -99,10 +99,26 @@ def add_news_features(panel_df, news_path='output/data/raw_news.csv'):
     news_df['symbols'] = news_df['symbols'].apply(ast.literal_eval)
     news_df = news_df.explode('symbols').rename(columns={'symbols': 'symbol'})
 
-    # We only care about the calendar date, not the exact publish time.
-    # normalize() zeroes out the time-of-day so multiple articles on the same
-    # day collapse to the same key when we group.
-    news_df['timestamp'] = pd.to_datetime(news_df['created_at'], utc=True).dt.normalize()
+    # We only care about the calendar date, not the exact publish time -- but
+    # "calendar date" must mean the US market's date, not UTC's. Normalizing
+    # in UTC first (as an earlier version did) put the day boundary at
+    # midnight UTC, i.e. 20:00 ET (EDT) or 19:00 ET (EST) -- not market close
+    # (16:00 ET) and not midnight ET either. That split the same after-hours
+    # news window inconsistently: an article at 18:00 ET stayed on its own
+    # UTC day while one at 21:00 ET on the same trading evening rolled onto
+    # the next UTC day, purely as an artifact of the UTC offset rather than
+    # any real trading-day boundary. Converting to US/Eastern before
+    # normalizing makes every after-hours article land on the same calendar
+    # date as the trading day it was published on.
+    # tz_localize(None) after tz_convert drops the tz info but keeps the ET
+    # wall-clock time, so the result is tz-naive (matching panel_df's own
+    # tz-naive timestamp column below) while still using the ET calendar day.
+    news_df['timestamp'] = (
+        pd.to_datetime(news_df['created_at'], utc=True)
+        .dt.tz_convert('America/New_York')
+        .dt.tz_localize(None)
+        .dt.normalize()
+    )
 
     news_counts = (
         news_df.groupby(['symbol', 'timestamp'])

@@ -30,8 +30,9 @@ def run_logistic_model(symbol):
     scaler = StandardScaler()
     # Then we fit the scaler into our train features, fit will take the average and the SD of this dataset and converts the data
     x_train_scaled = scaler.fit_transform(x_train)
-    # IMPORTANT: For the train features, use transform instead of fit to prevent data leakage,
-    # Transofrm will take the average and SD from the test dataset to prevent any future data leaking
+    # IMPORTANT: For the test features, use transform instead of fit to prevent data leakage --
+    # transform reuses the average and SD already fit on the TRAIN set above, never recomputing
+    # them from the test set, which is what would leak test-set information into the model.
     x_test_scaled = scaler.transform(x_test)
     # Then these will create numpy arrays, not pandas dataframe
 
