@@ -20,6 +20,7 @@ import pandas as pd
 from pipeline.audit.log import append_entry, read_log
 from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
 from pipeline.execution.orders import submit_open_order
+from pipeline.execution.positions import open_spread_positions
 from pipeline.options.chain import fetch_chain, get_spot
 from pipeline.options.contracts import expiries_in_window
 from pipeline.options.selector import select_spread
@@ -93,7 +94,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         return {"outcome": "SKIPPED", "reason": "no evidence gate"}
     gate_df = pd.read_csv(GATE_PATH)
 
-    account = get_account_state(peak_equity=_load_peak_equity())
+    account = get_account_state(peak_equity=_load_peak_equity(), open_positions=open_spread_positions())
     spot = get_spot()
     closes = fetch_recent_closes()
     rv_10d = realized_vol(closes, 10)
@@ -139,6 +140,8 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
         "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
         "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
+        "short_symbol": proposal["short_symbol"], "long_symbol": proposal["long_symbol"],
+        "net_delta_share_equiv": proposal["net_delta_share_equiv"],
         "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
         "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
         "guards_failed": [], "outcome": "DRY_RUN" if dry_run else "SOLD",
