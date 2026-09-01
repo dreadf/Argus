@@ -40,12 +40,73 @@ CONTROLS_ENABLED = os.getenv("CONTROLS_ENABLED", "false").lower() in ("true", "1
 
 st.set_page_config(page_title="Evidence Gate", page_icon="📉", layout="wide")
 
-st.title("Evidence Gate")
-st.caption(
-    "An options agent that sells S&P 500 volatility premium only when the measured edge "
-    "clears a statistical bar -- and refuses to trade when it doesn't."
+# Design tokens are set in .streamlit/config.toml (theme colors -- native
+# widgets like st.dataframe and st.metric read those directly; CSS cannot
+# reach inside their canvas-rendered internals). This block covers what
+# config.toml can't: typography, spacing, and the two custom elements
+# below (the mode badge, metric-card borders). Inter is a free Google Font
+# used as the shared substrate under most fintech dashboards' typography,
+# not a clone of any one product's proprietary system.
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+    html, body, [class*="css"] { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
+
+    /* Financial figures: tabular numerals so columns of dollar amounts
+       align, same convention terminals and trading UIs use. */
+    [data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.8rem;
+        letter-spacing: 0.02em;
+        color: #8B95A1;
+        text-transform: uppercase;
+    }
+    [data-testid="stMetric"] {
+        background: #141A21;
+        border: 1px solid #232B35;
+        border-radius: 10px;
+        padding: 1rem 1.1rem 0.6rem 1.1rem;
+    }
+
+    h1 { font-weight: 700; letter-spacing: -0.02em; }
+    h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+
+    .mode-badge {
+        display: inline-block;
+        padding: 0.15rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        vertical-align: middle;
+        margin-left: 0.6rem;
+    }
+    .mode-badge.readonly { background: rgba(76, 139, 245, 0.15); color: #7CA6F5; border: 1px solid rgba(76, 139, 245, 0.35); }
+    .mode-badge.local { background: rgba(242, 166, 90, 0.15); color: #F2A65A; border: 1px solid rgba(242, 166, 90, 0.35); }
+
+    .eyebrow { color: #8B95A1; font-size: 0.85rem; margin-top: -0.6rem; margin-bottom: 1rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
-st.caption(f"Mode: {'controls enabled (local)' if CONTROLS_ENABLED else 'read-only (public)'}")
+
+badge_class, badge_text = ("local", "controls enabled, local") if CONTROLS_ENABLED else ("readonly", "read-only, public")
+st.markdown(
+    f'<h1 style="margin-bottom:0;">Evidence Gate <span class="mode-badge {badge_class}">{badge_text}</span></h1>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<p class="eyebrow">An options agent that sells S&P 500 volatility premium only when the measured '
+    "edge clears a statistical bar &mdash; and refuses to trade when it doesn't.</p>",
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
@@ -103,9 +164,12 @@ try:
         curve_df = pd.read_csv(curve_path, parse_dates=["entry"]).set_index("entry")
 
         st.caption("Cumulative P&L per contract, $ -- trade every week vs. the VIX term-structure filter")
-        st.line_chart(curve_df[["cum_pnl_unfiltered", "cum_pnl_filtered"]].rename(columns={
-            "cum_pnl_unfiltered": "trade every week", "cum_pnl_filtered": "VIX filter",
-        }))
+        st.line_chart(
+            curve_df[["cum_pnl_unfiltered", "cum_pnl_filtered"]].rename(columns={
+                "cum_pnl_unfiltered": "trade every week", "cum_pnl_filtered": "VIX filter",
+            }),
+            color=["#F2A65A", "#4C8BF5"],  # amber = unfiltered (what breaks in 2018), blue = the filter we recommend
+        )
 
         def _max_dd(s: pd.Series) -> float:
             return float((s.cummax() - s).max())
@@ -132,9 +196,12 @@ try:
                 "dollar comparison needs a position-sizing assumption, which is in `EXPERIMENT.md`'s portfolio-basis "
                 "Sharpe/drawdown table instead. This chart exists only to show when SPY itself was falling."
             )
-            st.line_chart(curve_df[["spy_indexed", "cash_indexed"]].rename(columns={
-                "spy_indexed": "SPY (indexed)", "cash_indexed": "cash @ 3%/yr (indexed)",
-            }))
+            st.line_chart(
+                curve_df[["spy_indexed", "cash_indexed"]].rename(columns={
+                    "spy_indexed": "SPY (indexed)", "cash_indexed": "cash @ 3%/yr (indexed)",
+                }),
+                color=["#8B95A1", "#4C5A6B"],
+            )
     else:
         st.warning(
             "Reconstruction has not been computed yet. Run `python -m pipeline.backtest.reconstruct`."

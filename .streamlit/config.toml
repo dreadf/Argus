@@ -1,0 +1,18 @@
+# Design tokens for the public dashboard. Dark, high-contrast, one accent
+# color -- the shared open substrate under most fintech dashboards (Inter
+# typeface, restrained palette, generous spacing), not a clone of any one
+# product's proprietary system. Kept in config.toml (not just inline CSS)
+# so Streamlit's own native widgets (st.dataframe, st.metric borders,
+# buttons) pick these up automatically -- custom CSS in app.py cannot
+# reach inside those canvas-rendered components.
+
+[theme]
+base = "dark"
+primaryColor = "#4C8BF5"
+backgroundColor = "#0B0F14"
+secondaryBackgroundColor = "#141A21"
+textColor = "#E6E9EE"
+font = "sans serif"
+
+[server]
+headless = true
