@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+output/
+pipeline/
+scripts/
+tests/
+.streamlit/
+.devcontainer/
+.github/
+*.md
+*.ipynb
