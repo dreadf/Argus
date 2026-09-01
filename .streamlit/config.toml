@@ -1,18 +1,16 @@
 # Design tokens for the public dashboard: a warm-neutral "instrument panel"
-# palette grounded in the subject (a barometric amber accent -- the color
-# of a volatility/storm warning, tied to what this system actually
-# watches) rather than the generic blue-on-near-black fintech default.
-# Kept in config.toml (not just inline CSS) so Streamlit's own native
-# widgets (st.dataframe, st.metric borders, buttons) pick these up
-# automatically -- custom CSS in app.py cannot reach inside those
-# canvas-rendered components.
+# palette with a teal accent (previously amber -- dropped after direct
+# feedback: "I don't like the yellowish look"). Kept in config.toml (not
+# just inline CSS) so Streamlit's own native widgets (st.dataframe,
+# st.metric borders, buttons) pick these up automatically -- custom CSS
+# in app.py cannot reach inside those canvas-rendered components.
 
 [theme]
 base = "dark"
-primaryColor = "#C9722E"
-backgroundColor = "#15130F"
-secondaryBackgroundColor = "#1E1B16"
-textColor = "#EDE6D8"
+primaryColor = "#4FBDBA"
+backgroundColor = "#14120F"
+secondaryBackgroundColor = "#1D1A16"
+textColor = "#EAE3D6"
 font = "sans serif"
 
 [server]
