@@ -33,7 +33,7 @@
 <main id="main">
 
   <section id="tab-overview" class="tab-panel">
-    <div class="card" id="card-account">
+    <div class="card accent-top" id="card-account">
       <div class="card-title">Account</div>
       <div class="card-subtitle">Cash plus what any open positions are worth right now, live from Alpaca</div>
       <div class="kpi-row" id="account-metrics"></div>
@@ -102,7 +102,7 @@
       </details>
     </div>
 
-    <div class="card">
+    <div class="card" id="card-validation">
       <div class="card-head">
         <div class="card-title">Why the reconstruction can be trusted</div>
         <button class="info-btn" type="button" aria-label="More about this card">?</button>
@@ -113,7 +113,7 @@
       <div class="table-wrap"><table id="validation-table"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="card-false-trip">
       <div class="card-head">
         <div class="card-title">Do the safety guards actually work?</div>
         <button class="info-btn" type="button" aria-label="More about this card">?</button>
@@ -124,14 +124,14 @@
       <div class="table-wrap"><table id="false-trip-table"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <div class="card">
+    <div class="card accent-top">
       <div class="card-head">
         <div class="card-title">Evidence gate</div>
         <button class="info-btn" type="button" aria-label="More about this card">?</button>
         <span class="info-tip" role="tooltip">Every (distance, width) combination swept against 128 real historical weeks. A cell only ships if its win-rate cushion clears 2 standard errors above breakeven.</span>
       </div>
       <div class="card-subtitle">Which trade shapes clear the statistical bar today</div>
-      <p class="card-note" id="evidence-pick"></p>
+      <div id="evidence-pick"></div>
       <details>
         <summary id="evidence-summary">See all combinations tested</summary>
         <div class="table-wrap"><table id="evidence-table"><thead></thead><tbody></tbody></table></div>

@@ -11,29 +11,29 @@
       "timestamp": "2026-09-01T17:20:30.993276+00:00",
       "mode": "AUTO",
       "outcome": "FILLED",
-      "category": "Other",
-      "reason": ""
+      "category": "Traded",
+      "reason": "Opened SPY 735/730P, 6 contract(s) at $22.00/contract (Original SOLD order (net -0.27) sat unfilled 28 min as the market moved the mid down to -0.22; cancelled and resubmitted at refreshed mid.)"
     },
     {
       "timestamp": "2026-09-01T16:38:25.479464+00:00",
       "mode": "AUTO",
       "outcome": "SOLD",
       "category": "Traded",
-      "reason": "SPY260911P00735000 / SPY260911P00730000, 6.0 contract(s)"
+      "reason": "Opened SPY 735/730P, 6 contract(s) at $27.00/contract"
     },
     {
       "timestamp": "2026-09-01T02:45:04.955715+00:00",
       "mode": "MANUAL",
       "outcome": "SKIPPED",
       "category": "Guard-blocked",
-      "reason": "check_market_open"
+      "reason": "Market was closed"
     },
     {
       "timestamp": "2026-08-31T09:50:43.742444+00:00",
       "mode": "MANUAL",
       "outcome": "SKIPPED",
       "category": "Guard-blocked",
-      "reason": "data/account fetch failed: simulated API failure"
+      "reason": "Could not fetch live account or market data"
     }
   ]
 }

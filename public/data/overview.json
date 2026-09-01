@@ -6,18 +6,20 @@
     "timestamp": "2026-09-01T17:20:30.993276+00:00"
   },
   "market": {
-    "spot": 761.13,
-    "yesterday_move_pct": -0.0074980113969773665,
+    "spot": 761.9,
+    "yesterday_move_pct": -0.006832970386114967,
     "contango": 1.4205834683954621,
     "contango_threshold": 1.119811583238015
   },
   "market_error": null,
   "volatility": {
     "vix9d_decimal": 0.1234,
-    "rv10d": 0.07881841185167046,
-    "ratio": 1.5656240350570407,
+    "rv10d": 0.07727860632161289,
+    "ratio": 1.596819687539941,
     "verdict_class": "good",
-    "verdict_text": "Rich: selling is well compensated right now"
+    "verdict_text": "Rich: selling is well compensated right now",
+    "rich_threshold": 1.15,
+    "thin_threshold": 0.85
   },
   "decision_path": [
     {
@@ -47,7 +49,7 @@
       "long_symbol": "SPY260911P00730000",
       "underlying": "SPY",
       "strikes": "SELL $735.00P / BUY $730.00P",
-      "room_pct": 0.03433053486263844,
+      "room_pct": 0.03530647066544163,
       "expires_days": 9,
       "qty": 6,
       "collected": 132.0,

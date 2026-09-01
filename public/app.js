@@ -156,9 +156,15 @@ function renderVolatility(overview) {
   const v = overview.volatility;
   box.appendChild(metric("VIX9D (implied)", fmtPct(v.vix9d_decimal, 1)));
   box.appendChild(metric("Realized vol (10d)", fmtPct(v.rv10d, 1)));
-  box.appendChild(metric("Ratio", fmtNum(v.ratio, 2), null, v.verdict_class === "neutral" ? null : v.verdict_class));
+  box.appendChild(metric("Ratio = VIX9D / realized", fmtNum(v.ratio, 2), null, v.verdict_class === "neutral" ? null : v.verdict_class));
+
+  let thresholdText;
+  if (v.verdict_class === "good") thresholdText = `${fmtNum(v.ratio, 2)} is above the ${fmtNum(v.rich_threshold, 2)} "rich" line`;
+  else if (v.verdict_class === "bad") thresholdText = `${fmtNum(v.ratio, 2)} is below the ${fmtNum(v.thin_threshold, 2)} "thin" line`;
+  else thresholdText = `${fmtNum(v.ratio, 2)} sits between the ${fmtNum(v.thin_threshold, 2)}-${fmtNum(v.rich_threshold, 2)} "fair" band`;
   verdict.className = `card-note ${v.verdict_class}`;
-  verdict.textContent = v.verdict_text;
+  verdict.textContent = `${v.verdict_text} (${thresholdText}).`;
+  document.getElementById("card-volatility").className = `card ${v.verdict_class === "neutral" ? "" : v.verdict_class + "-top"}`;
 }
 
 // Research-track volatility forecast (HAR-X). Rendered only when
@@ -203,6 +209,7 @@ function renderPositions(overview, account) {
     return;
   }
   card.hidden = false;
+  card.className = `card ${positions.some((p) => p.room_pct !== null && p.room_pct < 0.02) ? "bad-top" : "accent-top"}`;
   const liveBySymbol = {};
   if (account && account.positions) account.positions.forEach((p) => (liveBySymbol[p.symbol] = p));
 
@@ -314,6 +321,7 @@ function renderValidation(tr) {
   const allInside = v.quartiles.every((q) => q.ratio >= v.band[0] && q.ratio <= v.band[1]);
   headline.appendChild(metric("Correlation (real vs. modelled credit)", fmtNum(v.correlation, 3)));
   headline.appendChild(metric("Quartiles inside band", `${v.quartiles.length} of ${v.quartiles.length}`, `Band: ${v.band[0]}-${v.band[1]}`, allInside ? "good" : "bad"));
+  document.getElementById("card-validation").className = `card ${allInside ? "good-top" : "bad-top"}`;
 
   table.querySelector("thead").innerHTML = "<tr><th>Quartile</th><th>Weeks</th><th>Mean VIX9D</th><th>Real credit</th><th>Model credit</th><th>Model/real</th></tr>";
   const tbody = table.querySelector("tbody");
@@ -339,8 +347,10 @@ function renderFalseTrip(tr) {
     return;
   }
   const ft = tr.false_trip;
-  headline.appendChild(metric("Blocked (aggregate)", fmtPct(ft.blocked_pct, 1), `Bar: ≤${fmtPct(ft.bar, 0)}`, ft.blocked_pct <= ft.bar ? "good" : "bad"));
+  const ftGood = ft.blocked_pct <= ft.bar;
+  headline.appendChild(metric("Blocked (aggregate)", fmtPct(ft.blocked_pct, 1), `Bar: ≤${fmtPct(ft.bar, 0)}`, ftGood ? "good" : "bad"));
   headline.appendChild(metric("Real winning weeks tested", String(ft.n_winners)));
+  document.getElementById("card-false-trip").className = `card ${ftGood ? "good-top" : "bad-top"}`;
 
   table.querySelector("thead").innerHTML = "<tr><th>Regime</th><th>Weeks</th><th>Blocked</th><th>Blocked %</th></tr>";
   const tbody = table.querySelector("tbody");
@@ -359,11 +369,17 @@ function renderEvidence(ev) {
   const pick = document.getElementById("evidence-pick");
   const summary = document.getElementById("evidence-summary");
   const table = document.getElementById("evidence-table");
+  pick.innerHTML = "";
   if (!ev.current_pick) {
-    pick.textContent = "No (distance, width) combination currently clears the 2-SE evidence bar. The system declines to trade, on purpose.";
+    pick.appendChild(el("p", { class: "card-note bad", text: "No (distance, width) combination currently clears the 2-SE evidence bar. The system declines to trade, on purpose." }));
   } else {
     const p = ev.current_pick;
-    pick.textContent = `Today's pick: ${fmtPct(p.distance, 0)} distance, $${p.width.toFixed(0)} width, cushion ${fmtNum(p.cushion_se, 2)} SE (${p.n_survivors} of ${p.n_total} combinations qualify).`;
+    const row = el("div", { class: "metric-row" });
+    row.appendChild(metric("Distance", fmtPct(p.distance, 0), "How far OTM the short strike sits", "accent"));
+    row.appendChild(metric("Width", `$${p.width.toFixed(0)}`, "Spread between short and long strike", "accent"));
+    row.appendChild(metric("Cushion", `${fmtNum(p.cushion_se, 2)} SE`, "Standard errors above the 2-SE bar", "good"));
+    row.appendChild(metric("Qualifying shapes", `${p.n_survivors} of ${p.n_total}`, "Combinations clearing the bar today"));
+    pick.appendChild(row);
   }
   summary.textContent = `See all ${ev.rows.length} combinations tested`;
 
@@ -417,7 +433,7 @@ function renderDecisions(decisions) {
       tr.appendChild(el("td", { text: r.timestamp || "" }));
       tr.appendChild(el("td", { text: r.mode || "" }));
       tr.appendChild(el("td", { text: r.outcome || "" }));
-      tr.appendChild(el("td", { text: r.reason || "" }));
+      tr.appendChild(el("td", { class: "wrap", text: r.reason || "" }));
       tbody.appendChild(tr);
     });
   }

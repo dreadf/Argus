@@ -108,7 +108,8 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
         rows.append({"stage": "2. Guards", "cls": "neutral", "detail": "not reached today"})
     elif has_failures:
         rows.append({"stage": "2. Guards", "cls": "bad",
-                     "detail": f"{int(guards_checked)} checked, blocked: " + "; ".join(str(g) for g in guards_failed)})
+                     "detail": f"{int(guards_checked)} checked, blocked: "
+                               + "; ".join(_humanize_guard_reason(str(g)) for g in guards_failed)})
     else:
         rows.append({"stage": "2. Guards", "cls": "good", "detail": f"all {int(guards_checked)} passed"})
 
@@ -136,7 +137,7 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
 
 def _category(row) -> str:
     outcome = row.get("outcome")
-    if outcome == "SOLD":
+    if outcome in ("SOLD", "FILLED"):
         return "Traded"
     if outcome == "DRY_RUN":
         return "Dry run"
@@ -148,14 +149,70 @@ def _category(row) -> str:
     return "Other"
 
 
+# Some SKIPPED rows carry raw internal identifiers (run_agent.py's pre-flight
+# checks, logged before the real per-trade guards ever run) rather than a
+# human sentence -- guards.py's own check_* functions already return readable
+# text like "market closed", so only these pre-flight literals need
+# translating for the public decision log.
+_REASON_TRANSLATIONS = {
+    "check_market_open": "Market was closed",
+    "check_evidence_gate": "No trade shape cleared the evidence gate today",
+    "no viable proposal from selector": "No (distance, width) combination cleared the evidence gate today",
+}
+_CLOSE_REASON_TEXT = {
+    "profit_target": "Closed at profit target",
+    "day_before_expiry": "Closed the day before expiry (assignment-risk protection)",
+    "hard_drawdown": "Closed on a hard drawdown stop",
+    "emergency_close_orphan": "Emergency-closed an unrecognized or orphaned leg",
+}
+
+
+def _humanize_guard_reason(raw: str) -> str:
+    if raw in _REASON_TRANSLATIONS:
+        return _REASON_TRANSLATIONS[raw]
+    if raw.startswith("get_clock failed"):
+        return "Could not confirm market hours (clock check failed)"
+    if raw.startswith("data/account fetch failed"):
+        return "Could not fetch live account or market data"
+    if raw.startswith("RECONCILE_MISMATCH"):
+        return "Broker holds a position the audit log doesn't recognize; blocked pending review"
+    if raw.startswith("REVIEWER_VETO"):
+        detail = raw.split(":", 1)[1].strip() if ":" in raw else ""
+        return f"AI reviewer vetoed: {detail}" if detail else "AI reviewer vetoed the proposal"
+    if raw.startswith("ORDER_NOT_FILLED"):
+        return "Order did not fill in time and was cancelled"
+    return raw
+
+
+def _describe_spread(row) -> str:
+    short_sym, long_sym = row.get("short_symbol"), row.get("long_symbol")
+    try:
+        short_info = parse_occ_symbol(short_sym)
+        long_info = parse_occ_symbol(long_sym)
+        desc = f"{short_info['root']} {short_info['strike']:.0f}/{long_info['strike']:.0f}{short_info['right']}"
+    except (ValueError, TypeError):
+        desc = f"{short_sym} / {long_sym}"
+    contracts = _clean(row.get("proposed_contracts"))
+    n = f"{contracts:.0f}" if contracts is not None else "?"
+    credit = _clean(row.get("proposed_credit"))
+    credit_text = f" at ${credit:.2f}/contract" if credit is not None else ""
+    human_action = _clean(row.get("human_action"))
+    suffix = f" ({human_action})" if isinstance(human_action, str) and human_action else ""
+    return f"Opened {desc}, {n} contract(s){credit_text}{suffix}"
+
+
 def _reason(row) -> str:
-    if row.get("outcome") == "SOLD":
-        return f"{row.get('short_symbol')} / {row.get('long_symbol')}, {row.get('proposed_contracts')} contract(s)"
-    if row.get("outcome") == "SKIPPED":
+    outcome = row.get("outcome")
+    if outcome in ("SOLD", "FILLED"):
+        return _describe_spread(row)
+    if outcome == "SKIPPED":
         reasons = row.get("guards_failed")
-        return "; ".join(str(r) for r in reasons) if isinstance(reasons, list) and reasons else ""
-    if row.get("outcome") == "CLOSED":
-        return str(row.get("close_reason", ""))
+        if isinstance(reasons, list) and reasons:
+            return "; ".join(_humanize_guard_reason(str(r)) for r in reasons)
+        return "No reason recorded"
+    if outcome in ("CLOSED", "EMERGENCY_CLOSE_ORPHAN"):
+        raw = str(row.get("close_reason", "") or "")
+        return _CLOSE_REASON_TEXT.get(raw, raw or "No reason recorded")
     return ""
 
 
@@ -192,7 +249,11 @@ def build_overview() -> dict:
                 v_cls, v_text = "bad", "Thin: selling isn't well compensated right now"
             else:
                 v_cls, v_text = "neutral", "Fair: normal compensation"
-            volatility = {"vix9d_decimal": vix9d_decimal, "rv10d": rv10d, "ratio": ratio, "verdict_class": v_cls, "verdict_text": v_text}
+            volatility = {
+                "vix9d_decimal": vix9d_decimal, "rv10d": rv10d, "ratio": ratio,
+                "verdict_class": v_cls, "verdict_text": v_text,
+                "rich_threshold": 1.15, "thin_threshold": 0.85,
+            }
     except Exception as e:
         market_error = str(e)
 
@@ -326,9 +387,13 @@ def build_decisions() -> dict:
     log_df["reason"] = log_df.apply(_reason, axis=1)
     log_df = log_df.sort_values("timestamp", ascending=False)
 
+    # A reprice (submit_with_retry) logs both a SOLD proposal row and a
+    # FILLED confirmation row for the same pair -- one real trade, two rows.
+    # Count distinct pairs, not rows, so a reprice doesn't inflate "Traded".
+    traded_pairs = log_df[log_df["category"] == "Traded"][["short_symbol", "long_symbol"]].dropna().drop_duplicates()
     summary = {
         "total": len(log_df),
-        "traded": int((log_df["category"] == "Traded").sum()),
+        "traded": len(traded_pairs),
         "guard_blocked": int((log_df["category"] == "Guard-blocked").sum()),
         "reviewer_vetoed": int((log_df["category"] == "Reviewer-vetoed").sum()),
         "dry_run": int((log_df["category"] == "Dry run").sum()),
