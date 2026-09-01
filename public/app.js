@@ -33,11 +33,25 @@ function metric(label, value, help, cls) {
   return wrap;
 }
 
-function kpiTile(label, value, cls) {
-  const wrap = el("div", { class: `kpi-tile${cls ? " " + cls : ""}` });
-  wrap.appendChild(el("div", { class: "kpi-label", text: label }));
-  wrap.appendChild(el("div", { class: `kpi-value${cls ? " " + cls : ""}`, text: value }));
+// Hierarchy by type and space, not by wrapping every number in its own box
+// (Stripe/Linear pattern: one hero number, everything else a plain
+// label:value pair -- color still reserved for genuine state).
+function heroStat(label, value) {
+  const wrap = el("div", { class: "stat-hero" });
+  wrap.appendChild(el("div", { class: "stat-hero-label", text: label }));
+  wrap.appendChild(el("div", { class: "stat-hero-value", text: value }));
   return wrap;
+}
+
+function statItem(label, value, cls) {
+  const wrap = el("div");
+  wrap.appendChild(el("div", { class: "stat-item-label", text: label }));
+  wrap.appendChild(el("div", { class: `stat-item-value${cls ? " " + cls : ""}`, text: value }));
+  return wrap;
+}
+
+function statRow(items) {
+  return el("div", { class: "stat-row" }, items);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,17 +101,22 @@ function initTabs() {
 }
 
 // ---------------------------------------------------------------------------
-// Status line
+// "Today, in plain terms" -- a short, colored label + plain-English detail
+// per line, meant to be read top-to-bottom as the answer to "what's going
+// on", with the metric cards below as supporting detail for anyone who
+// wants to check the underlying numbers themselves.
 // ---------------------------------------------------------------------------
-function renderStatus(status) {
-  const line = document.getElementById("status-line");
-  line.innerHTML = "";
-  const word = el("span", { class: `word ${status.cls}`, text: status.word });
-  line.appendChild(word);
-  line.appendChild(document.createTextNode(". " + status.rest));
-  if (status.timestamp) {
-    line.appendChild(document.createTextNode(" "));
-    line.appendChild(el("span", { class: "time", text: `(${status.timestamp})` }));
+function renderNarrative(overview) {
+  const box = document.getElementById("narrative");
+  box.innerHTML = "";
+  (overview.narrative || []).forEach((line) => {
+    const row = el("div", { class: "narrative-line" });
+    row.appendChild(el("span", { class: `narrative-label ${line.cls}`, text: line.label }));
+    row.appendChild(el("span", { class: "narrative-detail", text: line.detail }));
+    box.appendChild(row);
+  });
+  if (overview.status && overview.status.timestamp) {
+    box.appendChild(el("p", { class: "card-note", text: `Last decision logged: ${overview.status.timestamp}` }));
   }
 }
 
@@ -112,13 +131,16 @@ function renderAccount(account) {
     return;
   }
   const unrealized = account.positions.reduce((sum, p) => sum + (p.unrealized_pl || 0), 0);
-  box.appendChild(kpiTile("Equity", fmtMoney(account.equity), "accent"));
-  box.appendChild(kpiTile("Cash", fmtMoney(account.cash)));
-  box.appendChild(kpiTile("Options buying power", fmtMoney(account.options_buying_power)));
-  box.appendChild(kpiTile("Open positions", String(account.positions.length)));
+  box.appendChild(heroStat("Equity", fmtMoney(account.equity)));
+  const items = [
+    statItem("Cash", fmtMoney(account.cash)),
+    statItem("Options buying power", fmtMoney(account.options_buying_power)),
+    statItem("Open positions", String(account.positions.length)),
+  ];
   if (account.positions.length > 0) {
-    box.appendChild(kpiTile("Unrealized P&L", fmtMoney2(unrealized), unrealized >= 0 ? "good" : "bad"));
+    items.push(statItem("Unrealized P&L", fmtMoney2(unrealized), unrealized >= 0 ? "good" : "bad"));
   }
+  box.appendChild(statRow(items));
 }
 
 function renderMarket(overview) {
@@ -133,19 +155,24 @@ function renderMarket(overview) {
   const m = overview.market;
   const moveBlocks = Math.abs(m.yesterday_move_pct) > 0.02;
   const contangoBlocks = m.contango_threshold !== null && m.contango < m.contango_threshold;
-  box.appendChild(metric("SPY spot", fmtMoney2(m.spot)));
-  box.appendChild(metric("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), "Blocks a new trade above 2% in either direction.", moveBlocks ? "bad" : null));
-  box.appendChild(metric("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), "Below its own trailing 33rd percentile means the term structure is flattening.", contangoBlocks ? "bad" : null));
+  box.appendChild(statRow([
+    statItem("SPY spot", fmtMoney2(m.spot)),
+    statItem("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), moveBlocks ? "bad" : null),
+    statItem("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), contangoBlocks ? "bad" : null),
+  ]));
 
   const blocks = [];
-  if (moveBlocks) blocks.push(`SPY moved ${fmtPctSigned(m.yesterday_move_pct)} yesterday`);
+  if (moveBlocks) blocks.push(`SPY moved ${fmtPctSigned(m.yesterday_move_pct)} yesterday (blocks above 2%)`);
   if (contangoBlocks) blocks.push(`term structure is flattening (${fmtNum(m.contango, 3)} < ${fmtNum(m.contango_threshold, 3)})`);
   note.className = `card-note ${blocks.length ? "bad" : "good"}`;
   note.textContent = blocks.length ? `Would block a new trade today: ${blocks.join("; ")}.` : "Nothing here would block a new trade today.";
 }
 
+// Shows the calculation as one connected line (value / value = ratio ->
+// verdict) instead of three same-looking boxes the reader has to mentally
+// connect themselves.
 function renderVolatility(overview) {
-  const box = document.getElementById("volatility-metrics");
+  const box = document.getElementById("volatility-equation");
   const verdict = document.getElementById("volatility-verdict");
   box.innerHTML = "";
   verdict.innerHTML = "";
@@ -154,17 +181,28 @@ function renderVolatility(overview) {
     return;
   }
   const v = overview.volatility;
-  box.appendChild(metric("VIX9D (implied)", fmtPct(v.vix9d_decimal, 1)));
-  box.appendChild(metric("Realized vol (10d)", fmtPct(v.rv10d, 1)));
-  box.appendChild(metric("Ratio = VIX9D / realized", fmtNum(v.ratio, 2), null, v.verdict_class === "neutral" ? null : v.verdict_class));
+  const eq = el("div", { class: "equation" });
+  const item = (label, val) => {
+    const wrap = el("span", { class: "eq-item" });
+    wrap.appendChild(el("span", { class: "eq-label", text: label }));
+    wrap.appendChild(el("span", { class: "eq-val", text: val }));
+    return wrap;
+  };
+  eq.appendChild(item("VIX9D", fmtPct(v.vix9d_decimal, 1)));
+  eq.appendChild(el("span", { class: "eq-op", text: "÷" }));
+  eq.appendChild(item("realized (10d)", fmtPct(v.rv10d, 1)));
+  eq.appendChild(el("span", { class: "eq-op", text: "=" }));
+  eq.appendChild(item("ratio", fmtNum(v.ratio, 2)));
+  eq.appendChild(el("span", { class: "eq-op", text: "→" }));
+  eq.appendChild(el("span", { class: `eq-verdict ${v.verdict_class}`, text: v.verdict_text.split(":", 1)[0] }));
+  box.appendChild(eq);
 
   let thresholdText;
-  if (v.verdict_class === "good") thresholdText = `${fmtNum(v.ratio, 2)} is above the ${fmtNum(v.rich_threshold, 2)} "rich" line`;
-  else if (v.verdict_class === "bad") thresholdText = `${fmtNum(v.ratio, 2)} is below the ${fmtNum(v.thin_threshold, 2)} "thin" line`;
-  else thresholdText = `${fmtNum(v.ratio, 2)} sits between the ${fmtNum(v.thin_threshold, 2)}-${fmtNum(v.rich_threshold, 2)} "fair" band`;
+  if (v.verdict_class === "good") thresholdText = `above the ${fmtNum(v.rich_threshold, 2)} "rich" line`;
+  else if (v.verdict_class === "bad") thresholdText = `below the ${fmtNum(v.thin_threshold, 2)} "thin" line`;
+  else thresholdText = `between the ${fmtNum(v.thin_threshold, 2)}-${fmtNum(v.rich_threshold, 2)} "fair" band`;
   verdict.className = `card-note ${v.verdict_class}`;
-  verdict.textContent = `${v.verdict_text} (${thresholdText}).`;
-  document.getElementById("card-volatility").className = `card ${v.verdict_class === "neutral" ? "" : v.verdict_class + "-top"}`;
+  verdict.textContent = `${v.verdict_text}: the ratio is ${thresholdText}.`;
 }
 
 // Research-track volatility forecast (HAR-X). Rendered only when
@@ -172,19 +210,16 @@ function renderVolatility(overview) {
 // missing or stale export degrades to "not shown" rather than an error.
 function renderVolForecast(vf) {
   if (!vf) return;
-  const card = document.getElementById("card-vol-forecast");
+  const card = document.getElementById("section-vol-forecast");
   const box = document.getElementById("vol-forecast-metrics");
   const note = document.getElementById("vol-forecast-note");
   if (!card || !box) return;
   box.innerHTML = "";
-  box.appendChild(
-    metric("Forecast vol (annualized)", `${fmtNum(vf.forecast_vol_annualized_pct, 2)}%`,
-           `Data through ${vf.data_through}`)
-  );
-  box.appendChild(
-    metric(`Breach prob. (${fmtNum(vf.breach_distance_pct, 0)}% / weekly)`, fmtPct(vf.breach_prob, 2))
-  );
-  if (note) note.textContent = vf.note || "";
+  box.appendChild(statRow([
+    statItem("Forecast vol (annualized)", `${fmtNum(vf.forecast_vol_annualized_pct, 2)}%`),
+    statItem(`Breach prob. (${fmtNum(vf.breach_distance_pct, 0)}% / weekly)`, fmtPct(vf.breach_prob, 2)),
+  ]));
+  if (note) note.textContent = vf.note ? `${vf.note} (data through ${vf.data_through}).` : `Data through ${vf.data_through}.`;
   card.hidden = false;
 }
 
@@ -492,7 +527,7 @@ async function main() {
     volForecast = null;
   }
 
-  renderStatus(overview.status);
+  renderNarrative(overview);
   renderAccount(account);
   renderMarket(overview);
   renderVolatility(overview);

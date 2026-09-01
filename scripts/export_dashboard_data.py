@@ -301,7 +301,58 @@ def build_overview() -> dict:
         "volatility": volatility,
         "decision_path": _decision_path(gate_df, gate_choice, latest_row),
         "open_positions": open_positions,
+        "narrative": _narrative(status, market, volatility, open_positions, gate_choice),
     }
+
+
+def _narrative(status, market, volatility, open_positions, gate_choice) -> list[dict]:
+    """A short, plain-English readout of today's state as {label, cls,
+    detail} lines -- label carries the color (the one verdict word), detail
+    is the plain-language explanation. This is what a reader should be able
+    to read top-to-bottom and understand "what's going on" without parsing
+    the metric cards below, which stay as the supporting detail."""
+    lines = []
+
+    if open_positions:
+        p = open_positions[0]
+        extra = f" (and {len(open_positions) - 1} more)" if len(open_positions) > 1 else ""
+        lines.append({
+            "label": "Open position", "cls": "neutral",
+            "detail": f"{p['underlying']} {p['strikes']}, {p['qty']} contract(s), ${p['collected']:.0f} collected{extra}.",
+        })
+    else:
+        lines.append({"label": status.get("word", "Unknown"), "cls": status.get("cls", "neutral"), "detail": status.get("rest", "")})
+
+    if market:
+        move = market["yesterday_move_pct"]
+        direction = "up" if move >= 0 else "down"
+        would_block_move = abs(move) > 0.02
+        would_block_term = market.get("contango_threshold") is not None and market["contango"] < market["contango_threshold"]
+        would_block = would_block_move or would_block_term
+        lines.append({
+            "label": "Would block a new trade" if would_block else "Nothing blocks a new trade", "cls": "bad" if would_block else "good",
+            "detail": f"SPY ${market['spot']:.2f}, {direction} {abs(move):.1%} from yesterday"
+                      + (f", term structure at {market['contango']:.3f}" if would_block_term else "") + ".",
+        })
+
+    if volatility:
+        verdict_word = volatility["verdict_text"].split(":", 1)[0]
+        lines.append({
+            "label": verdict_word, "cls": volatility["verdict_class"],
+            "detail": f"VIX9D {volatility['vix9d_decimal']:.1%} vs. realized {volatility['rv10d']:.1%}, ratio {volatility['ratio']:.2f}.",
+        })
+
+    if not open_positions:
+        if gate_choice is not None:
+            lines.append({
+                "label": "Would trade", "cls": "good",
+                "detail": f"{gate_choice['distance']:.0%}-OTM, ${gate_choice['width']:.0f}-wide spread clears the evidence bar "
+                          f"({gate_choice['cushion_se']:.2f} SE cushion), if guards and reviewer also clear it.",
+            })
+        else:
+            lines.append({"label": "Won't trade", "cls": "bad", "detail": "No trade shape currently clears the evidence bar."})
+
+    return lines
 
 
 def build_track_record() -> dict:

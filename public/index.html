@@ -16,12 +16,12 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <header class="topbar">
-  <h1 class="page-title">Evidence Gate</h1>
-  <span class="badge accent"><span class="badge-dot"></span>Alpaca paper</span>
+  <div class="topbar-title">
+    <h1 class="page-title">Evidence Gate</h1>
+    <span class="badge accent"><span class="badge-dot"></span>Alpaca paper</span>
+  </div>
   <span class="mode-text">Read-only, public deployment</span>
 </header>
-
-<p id="status-line" class="status-line" aria-live="polite">Loading…</p>
 
 <nav class="navbar" aria-label="Dashboard sections">
   <button class="nav-tab" data-tab="overview" aria-current="page">Overview</button>
@@ -33,39 +33,44 @@
 <main id="main">
 
   <section id="tab-overview" class="tab-panel">
-    <div class="card accent-top" id="card-account">
+    <div class="card accent-top" id="card-today">
+      <div class="card-title">Today, in plain terms</div>
+      <div class="card-subtitle">The short version. Everything below is the supporting detail</div>
+      <div id="narrative"></div>
+    </div>
+
+    <div class="card" id="card-account">
       <div class="card-title">Account</div>
       <div class="card-subtitle">Cash plus what any open positions are worth right now, live from Alpaca</div>
-      <div class="kpi-row" id="account-metrics"></div>
+      <div id="account-metrics"></div>
     </div>
 
-    <div class="card" id="card-market">
-      <div class="card-title">Today's market</div>
-      <div class="card-subtitle">Live SPY price and the two numbers the Guard checks before opening anything</div>
-      <div class="metric-row" id="market-metrics"></div>
-      <p class="card-note" id="market-note"></p>
-    </div>
-
-    <div class="card" id="card-volatility">
-      <div class="card-head">
-        <div class="card-title">Volatility (SPY)</div>
-        <button class="info-btn" type="button" aria-label="More about this card">?</button>
-        <span class="info-tip" role="tooltip">Implied vs. realized: whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</span>
+    <div class="card" id="card-conditions">
+      <div class="card-section">
+        <div class="card-section-label">Today's market</div>
+        <div id="market-metrics"></div>
+        <p class="card-note" id="market-note"></p>
       </div>
-      <div class="card-subtitle">Is selling premium well paid right now?</div>
-      <div class="metric-row" id="volatility-metrics"></div>
-      <p class="card-note" id="volatility-verdict"></p>
-    </div>
 
-    <div class="card" id="card-vol-forecast" hidden>
-      <div class="card-head">
-        <div class="card-title">Volatility forecast (research track)</div>
-        <button class="info-btn" type="button" aria-label="More about this card">?</button>
-        <span class="info-tip" role="tooltip">HAR-X: a HAR realized-volatility model augmented with VIX, fit by QLIKE. Beats naive, EWMA, plain HAR, and XGBoost out of sample (EXPERIMENT.md, Exp. 14/18). Shown as context; it does not drive any trade decision.</span>
+      <div class="card-section" id="section-volatility">
+        <div class="card-section-label">
+          Volatility (SPY)
+          <button class="info-btn" type="button" aria-label="More about volatility">?</button>
+          <span class="info-tip" role="tooltip">Implied vs. realized: whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</span>
+        </div>
+        <div id="volatility-equation"></div>
+        <p class="card-note" id="volatility-verdict"></p>
       </div>
-      <div class="card-subtitle">What a validated model expects for the week ahead</div>
-      <div class="metric-row" id="vol-forecast-metrics"></div>
-      <p class="card-note" id="vol-forecast-note"></p>
+
+      <div class="card-section" id="section-vol-forecast" hidden>
+        <div class="card-section-label">
+          Volatility forecast (research track)
+          <button class="info-btn" type="button" aria-label="More about the forecast">?</button>
+          <span class="info-tip" role="tooltip">HAR-X: a HAR realized-volatility model augmented with VIX, fit by QLIKE. Beats naive, EWMA, plain HAR, and XGBoost out of sample (EXPERIMENT.md, Exp. 14/18). Shown as context; it does not drive any trade decision.</span>
+        </div>
+        <div id="vol-forecast-metrics"></div>
+        <p class="card-note" id="vol-forecast-note"></p>
+      </div>
     </div>
 
     <div class="card" id="card-path">

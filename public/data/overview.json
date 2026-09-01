@@ -6,7 +6,7 @@
     "timestamp": "2026-09-01T17:20:30.993276+00:00"
   },
   "market": {
-    "spot": 761.9,
+    "spot": 762.15,
     "yesterday_move_pct": -0.006832970386114967,
     "contango": 1.4205834683954621,
     "contango_threshold": 1.119811583238015
@@ -49,11 +49,28 @@
       "long_symbol": "SPY260911P00730000",
       "underlying": "SPY",
       "strikes": "SELL $735.00P / BUY $730.00P",
-      "room_pct": 0.03530647066544163,
+      "room_pct": 0.03562290887620544,
       "expires_days": 9,
       "qty": 6,
       "collected": 132.0,
       "max_loss": 2868.0
+    }
+  ],
+  "narrative": [
+    {
+      "label": "Open position",
+      "cls": "neutral",
+      "detail": "SPY SELL $735.00P / BUY $730.00P, 6 contract(s), $132 collected."
+    },
+    {
+      "label": "Nothing blocks a new trade",
+      "cls": "good",
+      "detail": "SPY $762.15, down 0.7% from yesterday."
+    },
+    {
+      "label": "Rich",
+      "cls": "good",
+      "detail": "VIX9D 12.3% vs. realized 7.7%, ratio 1.60."
     }
   ]
 }
