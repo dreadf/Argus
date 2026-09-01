@@ -26,7 +26,7 @@ function el(tag, attrs = {}, children = []) {
 }
 
 function metric(label, value, help, cls) {
-  const wrap = el("div");
+  const wrap = el("div", { class: `metric-tile${cls ? " " + cls : ""}` });
   wrap.appendChild(el("div", { class: "metric-label", text: label }));
   wrap.appendChild(el("div", { class: `metric-value${cls ? " " + cls : ""}`, text: value }));
   if (help) wrap.appendChild(el("div", { class: "metric-help", text: help }));
@@ -131,13 +131,16 @@ function renderMarket(overview) {
     return;
   }
   const m = overview.market;
+  const moveBlocks = Math.abs(m.yesterday_move_pct) > 0.02;
+  const contangoBlocks = m.contango_threshold !== null && m.contango < m.contango_threshold;
   box.appendChild(metric("SPY spot", fmtMoney2(m.spot)));
-  box.appendChild(metric("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), "Blocks a new trade above 2% in either direction."));
-  box.appendChild(metric("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), "Below its own trailing 33rd percentile means the term structure is flattening."));
+  box.appendChild(metric("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), "Blocks a new trade above 2% in either direction.", moveBlocks ? "bad" : null));
+  box.appendChild(metric("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), "Below its own trailing 33rd percentile means the term structure is flattening.", contangoBlocks ? "bad" : null));
 
   const blocks = [];
-  if (Math.abs(m.yesterday_move_pct) > 0.02) blocks.push(`SPY moved ${fmtPctSigned(m.yesterday_move_pct)} yesterday`);
-  if (m.contango_threshold !== null && m.contango < m.contango_threshold) blocks.push(`term structure is flattening (${fmtNum(m.contango, 3)} < ${fmtNum(m.contango_threshold, 3)})`);
+  if (moveBlocks) blocks.push(`SPY moved ${fmtPctSigned(m.yesterday_move_pct)} yesterday`);
+  if (contangoBlocks) blocks.push(`term structure is flattening (${fmtNum(m.contango, 3)} < ${fmtNum(m.contango_threshold, 3)})`);
+  note.className = `card-note ${blocks.length ? "bad" : "good"}`;
   note.textContent = blocks.length ? `Would block a new trade today: ${blocks.join("; ")}.` : "Nothing here would block a new trade today.";
 }
 
@@ -153,15 +156,16 @@ function renderVolatility(overview) {
   const v = overview.volatility;
   box.appendChild(metric("VIX9D (implied)", fmtPct(v.vix9d_decimal, 1)));
   box.appendChild(metric("Realized vol (10d)", fmtPct(v.rv10d, 1)));
-  box.appendChild(metric("Ratio", fmtNum(v.ratio, 2)));
-  verdict.appendChild(el("span", { class: `path-word ${v.verdict_class}`, text: v.verdict_text }));
+  box.appendChild(metric("Ratio", fmtNum(v.ratio, 2), null, v.verdict_class === "neutral" ? null : v.verdict_class));
+  verdict.className = `card-note ${v.verdict_class}`;
+  verdict.textContent = v.verdict_text;
 }
 
 function renderDecisionPath(overview) {
   const box = document.getElementById("decision-path");
   box.innerHTML = "";
   overview.decision_path.forEach((row) => {
-    const r = el("div", { class: "path-row" });
+    const r = el("div", { class: `path-row ${row.cls}` });
     r.appendChild(el("span", { class: "path-stage", text: row.stage }));
     r.appendChild(el("span", { class: `path-word ${row.cls}`, text: row.cls === "neutral" ? "N/A" : row.cls.toUpperCase() }));
     r.appendChild(el("span", { class: "path-detail", text: row.detail }));
@@ -191,7 +195,8 @@ function renderPositions(overview, account) {
       const live = liveBySymbol[sym];
       if (live && live.unrealized_pl !== null) unrealized += live.unrealized_pl;
     });
-    const tr = el("tr");
+    const atRisk = p.room_pct !== null && p.room_pct < 0.02;
+    const tr = el("tr", { class: atRisk ? "risk-bad" : "risk-ok" });
     tr.appendChild(el("td", { text: p.underlying }));
     tr.appendChild(el("td", { text: p.strikes }));
     const roomCell = el("td", { class: "num" });
@@ -200,7 +205,7 @@ function renderPositions(overview, account) {
       const fillPct = Math.max(0, Math.min(100, (Math.abs(p.room_pct) / barCap) * 100));
       const wrap = el("span", { class: "room-cell" });
       const bar = el("span", { class: "mini-bar" });
-      bar.appendChild(el("span", { class: `mini-bar-fill${p.room_pct < 0.02 ? " bad" : ""}`, style: `width:${fillPct}%` }));
+      bar.appendChild(el("span", { class: `mini-bar-fill${atRisk ? " bad" : ""}`, style: `width:${fillPct}%` }));
       wrap.appendChild(bar);
       wrap.appendChild(document.createTextNode(fmtPctSigned(p.room_pct)));
       roomCell.appendChild(wrap);
@@ -228,8 +233,8 @@ function renderEquityChart(tr) {
     data: {
       labels: c.dates,
       datasets: [
-        { label: "Trade every week", data: c.cum_pnl_unfiltered, borderColor: "#E0796B", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
-        { label: "VIX filter", data: c.cum_pnl_filtered, borderColor: "#6FBF8A", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
+        { label: "Trade every week", data: c.cum_pnl_unfiltered, borderColor: "#E2726E", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
+        { label: "VIX filter", data: c.cum_pnl_filtered, borderColor: "#5FBF95", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
       ],
     },
     options: chartOptions("$ per contract"),
@@ -243,8 +248,8 @@ function renderEquityChart(tr) {
     data: {
       labels: c.dates,
       datasets: [
-        { label: "SPY (indexed)", data: c.spy_indexed, borderColor: "#8F8575", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
-        { label: "Cash @ 3%/yr (indexed)", data: c.cash_indexed, borderColor: "#4A4438", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
+        { label: "SPY (indexed)", data: c.spy_indexed, borderColor: "#8B98A0", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
+        { label: "Cash @ 3%/yr (indexed)", data: c.cash_indexed, borderColor: "#45505A", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5 },
       ],
     },
     options: chartOptions("Indexed to 100"),
@@ -259,10 +264,10 @@ function chartOptions(yLabel) {
     animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 400 },
     interaction: { mode: "index", intersect: false },
     scales: {
-      x: { ticks: { color: "#8F8575", maxTicksLimit: 8 }, grid: { color: "#262119" } },
-      y: { title: { display: true, text: yLabel, color: "#8F8575" }, ticks: { color: "#8F8575" }, grid: { color: "#262119" } },
+      x: { ticks: { color: "#8B98A0", maxTicksLimit: 8 }, grid: { color: "#232B31" } },
+      y: { title: { display: true, text: yLabel, color: "#8B98A0" }, ticks: { color: "#8B98A0" }, grid: { color: "#232B31" } },
     },
-    plugins: { legend: { labels: { color: "#C7BFAF", font: { family: "IBM Plex Sans" } } } },
+    plugins: { legend: { labels: { color: "#C5CFD4", font: { family: "IBM Plex Sans" } } } },
   };
 }
 
@@ -285,8 +290,9 @@ function renderValidation(tr) {
     return;
   }
   const v = tr.validation;
+  const allInside = v.quartiles.every((q) => q.ratio >= v.band[0] && q.ratio <= v.band[1]);
   headline.appendChild(metric("Correlation (real vs. modelled credit)", fmtNum(v.correlation, 3)));
-  headline.appendChild(metric("Quartiles inside band", `${v.quartiles.length} of ${v.quartiles.length}`, `Band: ${v.band[0]}–${v.band[1]}`));
+  headline.appendChild(metric("Quartiles inside band", `${v.quartiles.length} of ${v.quartiles.length}`, `Band: ${v.band[0]}-${v.band[1]}`, allInside ? "good" : "bad"));
 
   table.querySelector("thead").innerHTML = "<tr><th>Quartile</th><th>Weeks</th><th>Mean VIX9D</th><th>Real credit</th><th>Model credit</th><th>Model/real</th></tr>";
   const tbody = table.querySelector("tbody");
@@ -312,7 +318,7 @@ function renderFalseTrip(tr) {
     return;
   }
   const ft = tr.false_trip;
-  headline.appendChild(metric("Blocked (aggregate)", fmtPct(ft.blocked_pct, 1), `Bar: ≤${fmtPct(ft.bar, 0)}`));
+  headline.appendChild(metric("Blocked (aggregate)", fmtPct(ft.blocked_pct, 1), `Bar: ≤${fmtPct(ft.bar, 0)}`, ft.blocked_pct <= ft.bar ? "good" : "bad"));
   headline.appendChild(metric("Real winning weeks tested", String(ft.n_winners)));
 
   table.querySelector("thead").innerHTML = "<tr><th>Regime</th><th>Weeks</th><th>Blocked</th><th>Blocked %</th></tr>";

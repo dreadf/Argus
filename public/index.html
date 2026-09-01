@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#14120F">
+<meta name="theme-color" content="#0F1417">
 <meta name="color-scheme" content="dark">
 <title>Evidence Gate</title>
 <meta name="description" content="An options agent that sells S&amp;P 500 volatility premium only when the measured edge clears a statistical bar, and refuses to trade when it doesn't.">
@@ -47,15 +47,23 @@
     </div>
 
     <div class="card" id="card-volatility">
-      <div class="card-title">Volatility (SPY)</div>
-      <div class="card-subtitle">Implied vs. realized: whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</div>
+      <div class="card-head">
+        <div class="card-title">Volatility (SPY)</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">Implied vs. realized: whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</span>
+      </div>
+      <div class="card-subtitle">Is selling premium well paid right now?</div>
       <div class="metric-row" id="volatility-metrics"></div>
       <p class="card-note" id="volatility-verdict"></p>
     </div>
 
     <div class="card" id="card-path">
-      <div class="card-title">Today's decision path</div>
-      <div class="card-subtitle">The gates one proposal a day has to clear, in order. Evidence gate is a standing backtest fact (not recomputed daily); the rest are today's actual run.</div>
+      <div class="card-head">
+        <div class="card-title">Today's decision path</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">Evidence gate is a standing backtest fact (not recomputed daily); the rest (Guards, Reviewer, Order) are today's actual run.</span>
+      </div>
+      <div class="card-subtitle">The four gates one proposal a day has to clear, in order</div>
       <div id="decision-path"></div>
     </div>
 
@@ -68,8 +76,12 @@
 
   <section id="tab-track-record" class="tab-panel" hidden>
     <div class="card">
-      <div class="card-title">Equity curve, 2016–2026</div>
-      <div class="card-subtitle">Cumulative P&amp;L per contract, $. Trade every week vs. the VIX term-structure filter. Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).</div>
+      <div class="card-head">
+        <div class="card-title">Equity curve, 2016–2026</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).</span>
+      </div>
+      <div class="card-subtitle">Cumulative $ per contract: trade every week vs. the VIX term-structure filter</div>
       <div class="chart-wrap"><canvas id="equity-chart" role="img" aria-label="Cumulative profit and loss per contract from 2016 to 2026, comparing trading every week against the VIX term-structure filter"></canvas></div>
       <div class="metric-row" id="track-record-metrics"></div>
       <details>
@@ -80,22 +92,34 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Why the reconstruction can be trusted</div>
-      <div class="card-subtitle">An earlier version of this same reconstruction passed at an aggregate 0.649 correlation while being off by roughly 25x between the calmest and most volatile regimes. This per-quartile check is what would have caught that.</div>
+      <div class="card-head">
+        <div class="card-title">Why the reconstruction can be trusted</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">An earlier version of this same reconstruction passed at an aggregate 0.649 correlation while being off by roughly 25x between the calmest and most volatile regimes. This per-quartile check is what would have caught that.</span>
+      </div>
+      <div class="card-subtitle">A per-quartile check against real market data, not just an aggregate score</div>
       <div class="metric-row" id="validation-headline"></div>
       <div class="table-wrap"><table id="validation-table"><thead></thead><tbody></tbody></table></div>
     </div>
 
     <div class="card">
-      <div class="card-title">Do the safety guards actually work?</div>
-      <div class="card-subtitle">How often the term-structure guard would have blocked a real, historically winning week, split by volatility regime, against a pre-committed 30% bar.</div>
+      <div class="card-head">
+        <div class="card-title">Do the safety guards actually work?</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">Split by volatility regime, against a pre-committed 30% bar, so the bar can't be picked after seeing the result.</span>
+      </div>
+      <div class="card-subtitle">How often the term-structure guard would have blocked a real, historically winning week</div>
       <div class="metric-row" id="false-trip-headline"></div>
       <div class="table-wrap"><table id="false-trip-table"><thead></thead><tbody></tbody></table></div>
     </div>
 
     <div class="card">
-      <div class="card-title">Evidence gate</div>
-      <div class="card-subtitle">Every (distance, width) combination swept against 128 real historical weeks. A cell only ships if its win-rate cushion clears 2 standard errors above breakeven.</div>
+      <div class="card-head">
+        <div class="card-title">Evidence gate</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">Every (distance, width) combination swept against 128 real historical weeks. A cell only ships if its win-rate cushion clears 2 standard errors above breakeven.</span>
+      </div>
+      <div class="card-subtitle">Which trade shapes clear the statistical bar today</div>
       <p class="card-note" id="evidence-pick"></p>
       <details>
         <summary id="evidence-summary">See all combinations tested</summary>
@@ -120,30 +144,52 @@
       <div class="card-subtitle">Picker → Guard → Reviewer → order, in order</div>
 
       <div class="pipeline" role="img" aria-label="Pipeline diagram: Picker proposes a trade, Guard checks fifteen hard limits and can block it, Reviewer (an AI) may veto or shrink it, then the Order goes to the broker and Monitor watches it every fifteen minutes. Recovery is a safety net connected to both Order and Monitor.">
-        <div class="pipeline-row">
-          <div class="pnode">Picker<span>proposes</span></div>
-          <div class="parrow">→</div>
-          <div class="pnode pnode-block">Guard<span>15 hard limits</span></div>
-          <div class="parrow">→</div>
-          <div class="pnode pnode-accent">Reviewer<span>veto / shrink only</span></div>
-          <div class="parrow">→</div>
-          <div class="pnode">Order<span>to broker</span></div>
-          <div class="parrow">→</div>
-          <div class="pnode">Monitor<span>every 15 min</span></div>
-        </div>
-        <div class="pipeline-side">
-          <div class="pside-line"></div>
-          <div class="pnode pnode-block">Recovery<span>safety net: closes excess risk on a fill mismatch or an unrecognized position</span></div>
+        <div class="pflow">
+          <div class="pflow-main">
+            <div class="pnode">Picker<span>proposes</span></div>
+            <div class="parrow">→</div>
+            <div class="pnode pnode-block">Guard<span>15 hard limits</span></div>
+            <div class="parrow">→</div>
+            <div class="pnode pnode-accent">Reviewer<span>veto / shrink only</span></div>
+            <div class="parrow">→</div>
+          </div>
+          <div class="pnode-group-wrap">
+            <div class="pnode-group">
+              <div class="pnode">Order<span>to broker</span></div>
+              <div class="parrow">→</div>
+              <div class="pnode">Monitor<span>every 15 min</span></div>
+            </div>
+            <div class="pbracket"></div>
+            <div class="pnode pnode-block precovery">Recovery<span>watches both</span></div>
+          </div>
         </div>
       </div>
 
-      <ol class="how-list">
-        <li><strong>Picker</strong>: fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</li>
-        <li><strong>Guard</strong>: 15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</li>
-        <li><strong>Reviewer</strong>: an AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt. Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</li>
-        <li><strong>Monitor</strong>: every 15 minutes, a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</li>
-        <li><strong>Recovery</strong>: an unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</li>
-      </ol>
+      <div class="stage-list">
+        <div class="stage-card">
+          <div class="stage-name">1. Picker</div>
+          <p>Fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</p>
+        </div>
+        <div class="stage-card bad">
+          <div class="stage-name">2. Guard</div>
+          <p>15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</p>
+        </div>
+        <div class="stage-card accent">
+          <div class="stage-name">3. Reviewer
+            <button class="info-btn" type="button" aria-label="More about the Reviewer">?</button>
+            <span class="info-tip" role="tooltip">Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</span>
+          </div>
+          <p>An AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt.</p>
+        </div>
+        <div class="stage-card">
+          <div class="stage-name">4. Monitor</div>
+          <p>Every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</p>
+        </div>
+        <div class="stage-card bad">
+          <div class="stage-name">5. Recovery</div>
+          <p>An unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</p>
+        </div>
+      </div>
 
       <p class="card-note">The AI is deliberately the least-trusted component here: it sits after every hard limit has already passed, and the only actions it's structurally capable of are subtracting risk or refusing. Enforced by <code>apply_reviewer_decision</code>, not by asking the prompt nicely.</p>
       <p class="card-note">Full design rationale: <code>OPTIONS_SYSTEM_PLAN.md</code>. Full experiment log, including two retracted findings: <code>EXPERIMENT.md</code>.</p>
