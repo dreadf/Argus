@@ -1,5 +1,5 @@
 """
-Daily entry point: Picker -> Guard -> (Reviewer, not built yet) -> order.
+Daily entry point: Picker -> Guard -> Reviewer -> order.
 dry_run=True by default (Verification #6: must print the bet, write an
 audit row, and send nothing).
 
@@ -24,7 +24,9 @@ from pipeline.execution.positions import open_spread_positions
 from pipeline.options.chain import fetch_chain, get_spot
 from pipeline.options.contracts import expiries_in_window
 from pipeline.options.selector import select_spread
+from pipeline.data.vix import current_contango_and_threshold, is_vix_cache_stale, refresh_vix_cache
 from pipeline.options.vol import fetch_recent_closes, realized_vol
+from pipeline.reviewer.reviewer import review_proposal
 from pipeline.risk import options_config as risk_cfg
 from pipeline.risk.guards import run_all_guards
 
@@ -132,11 +134,26 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         print("Picker found no viable trade today (empty gate, no listed strikes, or budget too small). Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": "no proposal"}
 
+    # VIX term-structure data (W4/check_term_structure) fails closed on
+    # its own, independent of the main data fetch above: a CBOE outage
+    # should not stop the OTHER 14 guards from evaluating and logging
+    # their own reasons -- it should only make check_term_structure
+    # itself block, the same way a missing/stale option chain only trips
+    # check_data_sanity rather than aborting the whole run.
+    try:
+        refresh_vix_cache()
+        vix_stale = is_vix_cache_stale()
+        vix_contango, vix_threshold = current_contango_and_threshold()
+    except Exception as e:
+        print(f"  VIX refresh/threshold failed ({e}); check_term_structure will block on stale data.")
+        vix_stale, vix_contango, vix_threshold = True, None, None
+
     guard_state = {
         "market_open": True, "data_stale": False, "spot_price": spot, "chain_spot_price": spot,
         "evidence_gate_passed": True, "current_equity": account["current_equity"],
         "peak_equity": account["peak_equity"], "open_positions": account["open_positions"],
         "rv_10d": rv_10d, "spy_yesterday_move_pct": spy_yesterday_move_pct,
+        "vix_data_stale": vix_stale, "vix_contango_ratio": vix_contango, "vix_contango_threshold": vix_threshold,
     }
     guard_result = run_all_guards(guard_state, proposal)
 
@@ -146,6 +163,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
+            "realized_distance": proposal["realized_distance"],
             "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
             "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
             "guards_failed": reasons, "outcome": "SKIPPED",
@@ -153,20 +171,50 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         print(f"Blocked by guards: {reasons}")
         return {"outcome": "SKIPPED", "reason": reasons}
 
+    # Reviewer: the third stage (Picker -> Guard -> Reviewer). May only
+    # veto or shrink what the Picker chose and every Guard already passed
+    # -- it can never raise size and never originate a proposal of its
+    # own (enforced in pipeline.reviewer.apply_reviewer_decision, not by
+    # the prompt). Never raises: a Gemini/MCP failure fails closed to a
+    # veto internally, so this call cannot crash the session and leave
+    # today unlogged (item 9's discipline, extended to this stage too).
+    reviewed = review_proposal(proposal, guard_result)
+
+    if reviewed["reviewer_vetoed"]:
+        append_entry({
+            "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
+            "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
+            "realized_distance": proposal["realized_distance"],
+            "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
+            "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
+            "guards_failed": [f"REVIEWER_VETO: {reviewed['reviewer_reason']}"],
+            "reviewer_decision": reviewed["reviewer_decision"], "reviewer_multiplier": reviewed["reviewer_multiplier"],
+            "reviewer_reason": reviewed["reviewer_reason"], "outcome": "SKIPPED",
+        })
+        print(f"Vetoed by Reviewer: {reviewed['reviewer_reason']}")
+        return {"outcome": "SKIPPED", "reason": f"reviewer veto: {reviewed['reviewer_reason']}"}
+
+    proposal = reviewed  # possibly shrunk (contracts/max_loss_total already recomputed); carries reviewer_* fields onward
+
     order_result = submit_open_order(get_trading_client(), proposal, dry_run=dry_run)
 
     append_entry({
         "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
         "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
         "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
+        "realized_distance": proposal["realized_distance"],
         "short_symbol": proposal["short_symbol"], "long_symbol": proposal["long_symbol"],
         "net_delta_share_equiv": proposal["net_delta_share_equiv"],
         "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
         "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
-        "guards_failed": [], "outcome": "DRY_RUN" if dry_run else "SOLD",
+        "guards_failed": [], "reviewer_decision": proposal["reviewer_decision"],
+        "reviewer_multiplier": proposal["reviewer_multiplier"], "reviewer_reason": proposal["reviewer_reason"],
+        "outcome": "DRY_RUN" if dry_run else "SOLD",
     })
     print(f"{'[DRY RUN] ' if dry_run else ''}Proposal accepted and logged: {proposal['short_symbol']}/{proposal['long_symbol']}, "
-          f"{proposal['contracts']} contracts, credit ${proposal['credit_per_contract']:.2f}/contract")
+          f"{proposal['contracts']} contracts, credit ${proposal['credit_per_contract']:.2f}/contract "
+          f"(Reviewer: {proposal['reviewer_decision']})")
     return {"outcome": "DRY_RUN" if dry_run else "SOLD", "proposal": proposal, "order_result": order_result}
 
 
