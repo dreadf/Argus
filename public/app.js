@@ -6,14 +6,14 @@
 // not hardcoded formats).
 // ---------------------------------------------------------------------------
 const fmtMoney = (v, opts = {}) =>
-  v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0, ...opts }).format(v);
-const fmtMoney2 = (v) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v));
-const fmtPct = (v, digits = 1) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v));
+  v === null || v === undefined ? "N/A" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0, ...opts }).format(v);
+const fmtMoney2 = (v) => (v === null || v === undefined ? "N/A" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v));
+const fmtPct = (v, digits = 1) => (v === null || v === undefined ? "N/A" : new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v));
 // Signed variant -- only for genuine deltas (a day-over-day move, a margin
 // that can be positive or negative), never for a level/rate like VIX9D or a
 // win rate, which read as nonsensical with a "+" in front.
-const fmtPctSigned = (v, digits = 1) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits, signDisplay: "exceptZero" }).format(v));
-const fmtNum = (v, digits = 2) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v));
+const fmtPctSigned = (v, digits = 1) => (v === null || v === undefined ? "N/A" : new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits, signDisplay: "exceptZero" }).format(v));
+const fmtNum = (v, digits = 2) => (v === null || v === undefined ? "N/A" : new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v));
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -87,7 +87,7 @@ function renderStatus(status) {
   line.innerHTML = "";
   const word = el("span", { class: `word ${status.cls}`, text: status.word });
   line.appendChild(word);
-  line.appendChild(document.createTextNode(" — " + status.rest));
+  line.appendChild(document.createTextNode(". " + status.rest));
   if (status.timestamp) {
     line.appendChild(document.createTextNode(" "));
     line.appendChild(el("span", { class: "time", text: `(${status.timestamp})` }));
@@ -152,7 +152,7 @@ function renderDecisionPath(overview) {
   overview.decision_path.forEach((row) => {
     const r = el("div", { class: "path-row" });
     r.appendChild(el("span", { class: "path-stage", text: row.stage }));
-    r.appendChild(el("span", { class: `path-word ${row.cls}`, text: row.cls === "neutral" ? "—" : row.cls.toUpperCase() }));
+    r.appendChild(el("span", { class: `path-word ${row.cls}`, text: row.cls === "neutral" ? "N/A" : row.cls.toUpperCase() }));
     r.appendChild(el("span", { class: "path-detail", text: row.detail }));
     box.appendChild(r);
   });
@@ -183,8 +183,8 @@ function renderPositions(overview, account) {
     const tr = el("tr");
     tr.appendChild(el("td", { text: p.underlying }));
     tr.appendChild(el("td", { text: p.strikes }));
-    tr.appendChild(el("td", { class: "num", text: p.room_pct !== null ? fmtPctSigned(p.room_pct) : "—" }));
-    tr.appendChild(el("td", { class: "num", text: p.expires_days !== null ? `${p.expires_days}d` : "—" }));
+    tr.appendChild(el("td", { class: "num", text: p.room_pct !== null ? fmtPctSigned(p.room_pct) : "N/A" }));
+    tr.appendChild(el("td", { class: "num", text: p.expires_days !== null ? `${p.expires_days}d` : "N/A" }));
     tr.appendChild(el("td", { class: "num", text: String(p.qty) }));
     tr.appendChild(el("td", { class: "num", text: fmtMoney2(p.collected) }));
     tr.appendChild(el("td", { class: "num", text: fmtMoney(p.max_loss) }));
@@ -309,7 +309,7 @@ function renderEvidence(ev) {
   const summary = document.getElementById("evidence-summary");
   const table = document.getElementById("evidence-table");
   if (!ev.current_pick) {
-    pick.textContent = "No (distance, width) combination currently clears the 2-SE evidence bar — the system declines to trade, on purpose.";
+    pick.textContent = "No (distance, width) combination currently clears the 2-SE evidence bar. The system declines to trade, on purpose.";
   } else {
     const p = ev.current_pick;
     pick.textContent = `Today's pick: ${fmtPct(p.distance, 0)} distance, $${p.width.toFixed(0)} width, cushion ${fmtNum(p.cushion_se, 2)} SE (${p.n_survivors} of ${p.n_total} combinations qualify).`;

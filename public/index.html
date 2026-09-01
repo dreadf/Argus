@@ -34,7 +34,7 @@
   <section id="tab-overview" class="tab-panel">
     <div class="card" id="card-account">
       <div class="card-title">Account</div>
-      <div class="card-subtitle">Cash plus what any open positions are worth right now — live from Alpaca</div>
+      <div class="card-subtitle">Cash plus what any open positions are worth right now, live from Alpaca</div>
       <div class="metric-row" id="account-metrics"></div>
     </div>
 
@@ -47,7 +47,7 @@
 
     <div class="card" id="card-volatility">
       <div class="card-title">Volatility (SPY)</div>
-      <div class="card-subtitle">Implied vs. realized — whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</div>
+      <div class="card-subtitle">Implied vs. realized: whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.</div>
       <div class="metric-row" id="volatility-metrics"></div>
       <p class="card-note" id="volatility-verdict"></p>
     </div>
@@ -68,26 +68,26 @@
   <section id="tab-track-record" class="tab-panel" hidden>
     <div class="card">
       <div class="card-title">Equity curve, 2016–2026</div>
-      <div class="card-subtitle">Cumulative P&amp;L per contract, $ — trade every week vs. the VIX term-structure filter. Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).</div>
+      <div class="card-subtitle">Cumulative P&amp;L per contract, $. Trade every week vs. the VIX term-structure filter. Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).</div>
       <div class="chart-wrap"><canvas id="equity-chart" role="img" aria-label="Cumulative profit and loss per contract from 2016 to 2026, comparing trading every week against the VIX term-structure filter"></canvas></div>
       <div class="metric-row" id="track-record-metrics"></div>
       <details>
         <summary>SPY and cash, for shape comparison (indexed, not dollar-matched)</summary>
-        <div class="card-subtitle">Shape comparison only — not on the same $-per-contract basis as the chart above.</div>
+        <div class="card-subtitle">Shape comparison only, not on the same $-per-contract basis as the chart above.</div>
         <div class="chart-wrap"><canvas id="reference-chart" role="img" aria-label="SPY price and a 3 percent annual cash rate, both indexed to 100, for shape comparison"></canvas></div>
       </details>
     </div>
 
     <div class="card">
       <div class="card-title">Why the reconstruction can be trusted</div>
-      <div class="card-subtitle">An earlier version of this same reconstruction passed at an aggregate 0.649 correlation while being off by roughly 25× between the calmest and most volatile regimes — this per-quartile check is what would have caught that.</div>
+      <div class="card-subtitle">An earlier version of this same reconstruction passed at an aggregate 0.649 correlation while being off by roughly 25x between the calmest and most volatile regimes. This per-quartile check is what would have caught that.</div>
       <div class="metric-row" id="validation-headline"></div>
       <div class="table-wrap"><table id="validation-table"><thead></thead><tbody></tbody></table></div>
     </div>
 
     <div class="card">
       <div class="card-title">Do the safety guards actually work?</div>
-      <div class="card-subtitle">How often the term-structure guard would have blocked a real, historically winning week — split by volatility regime, against a pre-committed 30% bar.</div>
+      <div class="card-subtitle">How often the term-structure guard would have blocked a real, historically winning week, split by volatility regime, against a pre-committed 30% bar.</div>
       <div class="metric-row" id="false-trip-headline"></div>
       <div class="table-wrap"><table id="false-trip-table"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -132,19 +132,19 @@
         </div>
         <div class="pipeline-side">
           <div class="pside-line"></div>
-          <div class="pnode pnode-block">Recovery<span>safety net — closes excess risk on a fill mismatch or an unrecognized position</span></div>
+          <div class="pnode pnode-block">Recovery<span>safety net: closes excess risk on a fill mismatch or an unrecognized position</span></div>
         </div>
       </div>
 
       <ol class="how-list">
-        <li><strong>Picker</strong> — fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</li>
-        <li><strong>Guard</strong> — 15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</li>
-        <li><strong>Reviewer</strong> — an AI (Gemini) may veto or shrink a Guard-approved proposal — never raise its size, never originate one. Enforced in code, not by the prompt. Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</li>
-        <li><strong>Monitor</strong> — every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</li>
-        <li><strong>Recovery</strong> — an unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</li>
+        <li><strong>Picker</strong>: fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</li>
+        <li><strong>Guard</strong>: 15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</li>
+        <li><strong>Reviewer</strong>: an AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt. Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</li>
+        <li><strong>Monitor</strong>: every 15 minutes, a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</li>
+        <li><strong>Recovery</strong>: an unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</li>
       </ol>
 
-      <p class="card-note">The AI is deliberately the least-trusted component here: it sits after every hard limit has already passed, and the only actions it's structurally capable of are subtracting risk or refusing — enforced by <code>apply_reviewer_decision</code>, not by asking the prompt nicely.</p>
+      <p class="card-note">The AI is deliberately the least-trusted component here: it sits after every hard limit has already passed, and the only actions it's structurally capable of are subtracting risk or refusing. Enforced by <code>apply_reviewer_decision</code>, not by asking the prompt nicely.</p>
       <p class="card-note">Full design rationale: <code>OPTIONS_SYSTEM_PLAN.md</code>. Full experiment log, including two retracted findings: <code>EXPERIMENT.md</code>.</p>
     </div>
   </section>
