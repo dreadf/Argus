@@ -1,0 +1,25 @@
+{
+  "summary": {
+    "total": 2,
+    "traded": 0,
+    "guard_blocked": 2,
+    "reviewer_vetoed": 0,
+    "dry_run": 0
+  },
+  "rows": [
+    {
+      "timestamp": "2026-09-01T02:45:04.955715+00:00",
+      "mode": "MANUAL",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "check_market_open"
+    },
+    {
+      "timestamp": "2026-08-31T09:50:43.742444+00:00",
+      "mode": "MANUAL",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "data/account fetch failed: simulated API failure"
+    }
+  ]
+}

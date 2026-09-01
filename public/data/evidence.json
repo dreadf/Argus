@@ -1,0 +1,251 @@
+{
+  "current_pick": {
+    "distance": 0.03,
+    "width": 5.0,
+    "cushion_se": 2.1340414881559115,
+    "n_survivors": 3,
+    "n_total": 24
+  },
+  "rows": [
+    {
+      "distance": 0.01,
+      "width": 1.0,
+      "n": 127,
+      "win_rate": 0.7795275590551181,
+      "required_win_rate": 0.795748031496063,
+      "cushion_se": -0.4409328626013155,
+      "mean_net_pnl": -0.0162204724409449,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.01,
+      "width": 2.0,
+      "n": 127,
+      "win_rate": 0.7795275590551181,
+      "required_win_rate": 0.8008267716535433,
+      "cushion_se": -0.5789919385128924,
+      "mean_net_pnl": -0.0331496062992131,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.01,
+      "width": 5.0,
+      "n": 127,
+      "win_rate": 0.7795275590551181,
+      "required_win_rate": 0.8212440944881889,
+      "cushion_se": -1.1340108281853212,
+      "mean_net_pnl": -0.0123622047244097,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.01,
+      "width": 10.0,
+      "n": 127,
+      "win_rate": 0.7795275590551181,
+      "required_win_rate": 0.8555354330708661,
+      "cushion_se": -2.066177146937129,
+      "mean_net_pnl": 0.1540157480314959,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.02,
+      "width": 1.0,
+      "n": 127,
+      "win_rate": 0.889763779527559,
+      "required_win_rate": 0.8876377952755906,
+      "cushion_se": 0.0765001673233804,
+      "mean_net_pnl": 0.0214960629921262,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.02,
+      "width": 2.0,
+      "n": 127,
+      "win_rate": 0.889763779527559,
+      "required_win_rate": 0.8907480314960631,
+      "cushion_se": -0.0354167441312,
+      "mean_net_pnl": 0.0633070866141729,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.02,
+      "width": 5.0,
+      "n": 127,
+      "win_rate": 0.889763779527559,
+      "required_win_rate": 0.9027244094488188,
+      "cushion_se": -0.4663676867195925,
+      "mean_net_pnl": 0.2173228346456691,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.02,
+      "width": 10.0,
+      "n": 126,
+      "win_rate": 0.8888888888888888,
+      "required_win_rate": 0.9205,
+      "cushion_se": -1.129074371996815,
+      "mean_net_pnl": 0.4358730158730154,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.03,
+      "width": 1.0,
+      "n": 126,
+      "win_rate": 0.9761904761904762,
+      "required_win_rate": 0.9415873015873016,
+      "cushion_se": 2.547760374687783,
+      "mean_net_pnl": 0.0419047619047615,
+      "passes_gate": true
+    },
+    {
+      "distance": 0.03,
+      "width": 2.0,
+      "n": 126,
+      "win_rate": 0.9761904761904762,
+      "required_win_rate": 0.9408333333333332,
+      "cushion_se": 2.603273502117913,
+      "mean_net_pnl": 0.0859523809523806,
+      "passes_gate": true
+    },
+    {
+      "distance": 0.03,
+      "width": 5.0,
+      "n": 126,
+      "win_rate": 0.9761904761904762,
+      "required_win_rate": 0.9472063492063492,
+      "cushion_se": 2.1340414881559115,
+      "mean_net_pnl": 0.1839682539682536,
+      "passes_gate": true
+    },
+    {
+      "distance": 0.03,
+      "width": 10.0,
+      "n": 124,
+      "win_rate": 0.9758064516129032,
+      "required_win_rate": 0.9568225806451612,
+      "cushion_se": 1.3758275085683265,
+      "mean_net_pnl": 0.3049999999999997,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.04,
+      "width": 1.0,
+      "n": 125,
+      "win_rate": 0.984,
+      "required_win_rate": 0.97352,
+      "cushion_se": 0.9338104906887228,
+      "mean_net_pnl": 0.01336,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.04,
+      "width": 2.0,
+      "n": 124,
+      "win_rate": 0.9838709677419356,
+      "required_win_rate": 0.9720564516129032,
+      "cushion_se": 1.044367994624848,
+      "mean_net_pnl": 0.0345967741935484,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.04,
+      "width": 5.0,
+      "n": 124,
+      "win_rate": 0.9838709677419356,
+      "required_win_rate": 0.9717258064516128,
+      "cushion_se": 1.0735960408908003,
+      "mean_net_pnl": 0.0958870967741936,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.04,
+      "width": 10.0,
+      "n": 119,
+      "win_rate": 0.9831932773109244,
+      "required_win_rate": 0.9760588235294118,
+      "cushion_se": 0.6054429719698519,
+      "mean_net_pnl": 0.15,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.05,
+      "width": 1.0,
+      "n": 120,
+      "win_rate": 0.9916666666666668,
+      "required_win_rate": 0.9896666666666668,
+      "cushion_se": 0.2410062937216488,
+      "mean_net_pnl": 0.0019999999999999,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.05,
+      "width": 2.0,
+      "n": 119,
+      "win_rate": 0.9915966386554622,
+      "required_win_rate": 0.983529411764706,
+      "cushion_se": 0.9640592147225904,
+      "mean_net_pnl": 0.0161344537815125,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.05,
+      "width": 5.0,
+      "n": 118,
+      "win_rate": 0.9915254237288136,
+      "required_win_rate": 0.983593220338983,
+      "cushion_se": 0.9399914893231848,
+      "mean_net_pnl": 0.0396610169491525,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.05,
+      "width": 10.0,
+      "n": 114,
+      "win_rate": 0.9912280701754386,
+      "required_win_rate": 0.9855,
+      "cushion_se": 0.6558830162257897,
+      "mean_net_pnl": 0.0572807017543859,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.06,
+      "width": 1.0,
+      "n": 113,
+      "win_rate": 0.991150442477876,
+      "required_win_rate": 0.9984070796460176,
+      "cushion_se": -0.8236525793249092,
+      "mean_net_pnl": -0.0072566371681415,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.06,
+      "width": 2.0,
+      "n": 112,
+      "win_rate": 0.9910714285714286,
+      "required_win_rate": 0.9920535714285714,
+      "cushion_se": -0.110494384513459,
+      "mean_net_pnl": -0.0019642857142857,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.06,
+      "width": 5.0,
+      "n": 113,
+      "win_rate": 0.991150442477876,
+      "required_win_rate": 0.9905486725663716,
+      "cushion_se": 0.0683028968220627,
+      "mean_net_pnl": 0.003008849557522,
+      "passes_gate": false
+    },
+    {
+      "distance": 0.06,
+      "width": 10.0,
+      "n": 103,
+      "win_rate": 0.9902912621359224,
+      "required_win_rate": 0.9920873786407768,
+      "cushion_se": -0.1859046508715829,
+      "mean_net_pnl": -0.0179611650485437,
+      "passes_gate": false
+    }
+  ]
+}
