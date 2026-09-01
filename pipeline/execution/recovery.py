@@ -99,9 +99,17 @@ def verify_fill_or_emergency_close(client, proposal: dict, dry_run: bool = True)
     raw_positions = account["raw_positions"]
 
     def _qty(symbol: str, side) -> int:
+        """abs() is load-bearing: Alpaca reports a SHORT position's qty as
+        NEGATIVE by broker convention (side already disambiguates short vs
+        long). Found live via the same bug in monitor.py's _raw_qty --
+        without abs(), a naked short (short_qty=-6, long_qty=0, the exact
+        dangerous case this function exists to catch) computed
+        orphan_side='long' instead of 'short' (since -6 > 0 is False), which
+        would have tried to close a long leg that was never filled while
+        leaving the real naked short completely unprotected."""
         for p in raw_positions:
             if p.symbol == symbol and p.side == side:
-                return int(float(p.qty))
+                return abs(int(float(p.qty)))
         return 0
 
     short_qty = _qty(proposal["short_symbol"], PositionSide.SHORT)
@@ -166,10 +174,10 @@ if __name__ == "__main__":
     from alpaca.trading.enums import PositionSide
 
     class _FakePosition:
-        def __init__(self, symbol: str, side):
+        def __init__(self, symbol: str, side, qty: str = "6"):
             self.symbol = symbol
             self.side = side
-            self.qty = "6"
+            self.qty = qty
 
     fake_log = __import__("pandas").DataFrame([
         {"outcome": "SOLD", "short_symbol": "SPY260909P00746000", "long_symbol": "SPY260909P00745000",
@@ -246,9 +254,14 @@ if __name__ == "__main__":
     print(f"Matched live fill: {result}")
 
     # 7. verify_fill_or_emergency_close: orphaned short leg -> emergency
-    # close submitted, halt=True.
+    # close submitted, halt=True. qty="-6" matches real Alpaca behavior
+    # (a short position's qty is reported negative) -- an earlier version
+    # of this test hardcoded qty="6" for every fake position regardless of
+    # side, which meant it never actually exercised the sign the broker
+    # really sends and missed a real bug where the un-abs()'d qty picked
+    # 'long' as the orphan side instead of 'short'.
     _broker_module.get_account_state = lambda: {"raw_positions": [
-        _FakePosition("SPY260909P00746000", PositionSide.SHORT),  # long leg never filled
+        _FakePosition("SPY260909P00746000", PositionSide.SHORT, qty="-6"),  # long leg never filled
     ]}
     emergency_calls = []
     _monitor_module.build_emergency_single_leg_close = lambda symbol, qty, side: emergency_calls.append((symbol, qty, side)) or object()
