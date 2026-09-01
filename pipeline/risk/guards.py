@@ -1,5 +1,7 @@
 """
-The 14 guards from OPTIONS_SYSTEM_PLAN.md Part 6. Each check_*(state, proposal)
+The guards from OPTIONS_SYSTEM_PLAN.md Part 6 (14 originally; check_term_structure
+added in Experiment 12d/W4, replacing the RV(10d) leg of check_volatility_regime).
+Each check_*(state, proposal)
 returns (passed: bool, reason: str). Any single failure blocks the trade;
 the reason is logged either way (audit/log.py, Build Step 8).
 
@@ -136,13 +138,44 @@ def check_liquidity(state: dict, proposal: dict) -> tuple[bool, str]:
 
 
 def check_volatility_regime(state: dict, proposal: dict) -> tuple[bool, str]:
-    rv = state.get("rv_10d")
-    if rv is not None and rv > cfg.VOL_REGIME_RV_THRESHOLD:
-        return False, f"annualized RV(10d) {rv:.2%} exceeds {cfg.VOL_REGIME_RV_THRESHOLD:.0%} skip threshold"
+    """W4 (Experiment 12d): the RV(10d) leg that used to live here was
+    retired and replaced by check_term_structure below, which uses a
+    forward-looking instrument (VIX3M/VIX9D) for the same underlying
+    risk. Trailing realized volatility is exactly the lagging quantity
+    that made an earlier version of the reconstruction in reconstruct.py
+    fail its own regime-split validation (0.03x-1.25x model/real error),
+    so replacing it here with the same lagging signal would just move
+    that problem into the live guard. This leg -- yesterday's SPY move --
+    is a distinct gap-risk check, not a pricing/regime check, and stays."""
     move = state.get("spy_yesterday_move_pct")
     if move is not None and abs(move) > cfg.SPY_DAILY_MOVE_THRESHOLD:
         return False, f"SPY moved {move:.2%} yesterday, exceeds {cfg.SPY_DAILY_MOVE_THRESHOLD:.0%} skip threshold"
-    return True, "calm volatility regime"
+    return True, "no large gap yesterday"
+
+
+def check_term_structure(state: dict, proposal: dict) -> tuple[bool, str]:
+    """W4: blocks when the VIX term structure (VIX3M/VIX9D) has flattened
+    or inverted below its own trailing history -- the condition
+    documented (Quantpedia; 2004-2025 CBOE data) to precede 21 of 22
+    backwardation episodes tied to a >5% S&P drawdown within 30 days.
+    Fails closed on missing/stale data rather than assuming calm, the
+    same convention check_data_sanity already uses for the option chain.
+
+    The threshold is precomputed by the caller from data strictly before
+    today (pipeline.data.vix.trailing_contango_threshold) and passed in
+    as a plain float, keeping this function -- like every other guard --
+    a pure function on plain dicts with no fetch of its own, so it stays
+    independently unit-testable and false-trip-testable without a live
+    VIX connection."""
+    if state.get("vix_data_stale", True):
+        return False, "VIX term-structure data stale or unavailable"
+    contango = state.get("vix_contango_ratio")
+    threshold = state.get("vix_contango_threshold")
+    if contango is None or threshold is None:
+        return False, "VIX term-structure data missing"
+    if contango < threshold:
+        return False, f"VIX3M/VIX9D {contango:.3f} below trailing 33rd-pct threshold {threshold:.3f} -- term structure flattening/inverting"
+    return True, f"VIX term structure normal ({contango:.3f} >= {threshold:.3f})"
 
 
 def check_drawdown_soft(state: dict, proposal: dict) -> tuple[bool, str]:
@@ -180,6 +213,7 @@ ALL_GUARDS = [
     check_expiry_day_rule,
     check_liquidity,
     check_volatility_regime,
+    check_term_structure,
     check_drawdown_soft,
     check_drawdown_hard,
 ]
@@ -210,6 +244,9 @@ if __name__ == "__main__":
         "open_positions": [],
         "rv_10d": 0.10,
         "spy_yesterday_move_pct": 0.005,
+        "vix_data_stale": False,
+        "vix_contango_ratio": 1.20,       # calm, normal term structure (real measured median ~1.21)
+        "vix_contango_threshold": 1.12,   # a real measured trailing 33rd-pct value; ratio comfortably above it
     }
     base_proposal = {
         # Real Experiment 11 numbers: 3% distance, $5 width, ~6 contracts.
@@ -231,7 +268,7 @@ if __name__ == "__main__":
     # 1. A clean proposal should pass everything.
     result = run_all_guards(base_state, base_proposal)
     assert result["passed"], result["failed"]
-    print("Clean proposal: PASS (all 14 guards)")
+    print(f"Clean proposal: PASS (all {len(ALL_GUARDS)} guards)")
 
     # 2. Exactly at the soft drawdown line (5.0%) should fail; just under should pass.
     at_line = {**base_state, "current_equity": 100_000 * (1 - cfg.DRAWDOWN_SOFT_PCT)}
@@ -250,6 +287,31 @@ if __name__ == "__main__":
     assert not passed, "at the concurrent-position cap should block"
     print(f"At max concurrent positions: BLOCKED ({reason})")
 
+    # 3b. Risk-limit ordering (T1 fix): CRASH_DAY_BUDGET_PCT must not exceed
+    # DRAWDOWN_HARD_PCT, or the crash-day budget could approve more
+    # simultaneous risk than the amount meant to trigger the emergency
+    # halt -- making Guard #14 structurally unreachable in the exact
+    # all-positions-lose-at-once scenario it exists for.
+    assert cfg.CRASH_DAY_BUDGET_PCT <= cfg.DRAWDOWN_HARD_PCT, (
+        f"CRASH_DAY_BUDGET_PCT ({cfg.CRASH_DAY_BUDGET_PCT:.0%}) exceeds "
+        f"DRAWDOWN_HARD_PCT ({cfg.DRAWDOWN_HARD_PCT:.0%}) -- the hard stop "
+        "would be unreachable if every open position lost its max at once."
+    )
+    print(f"Risk-limit ordering: crash-day budget {cfg.CRASH_DAY_BUDGET_PCT:.0%} <= hard stop {cfg.DRAWDOWN_HARD_PCT:.0%}: PASS")
+
+    # Concretely: fill the crash-day budget with positions at the per-trade
+    # cap and confirm the guard blocks a proposal that would push committed
+    # risk past what the hard stop is meant to bound.
+    n_at_cap = int(cfg.CRASH_DAY_BUDGET_PCT // cfg.PER_TRADE_CAP_PCT)  # positions before budget is used up
+    committed_positions = [{"max_loss_total": 100_000 * cfg.PER_TRADE_CAP_PCT, "net_delta_share_equiv": 5}] * n_at_cap
+    budget_state = {**base_state, "open_positions": committed_positions}
+    one_more = {**base_proposal, "max_loss_total": 100_000 * cfg.PER_TRADE_CAP_PCT}
+    passed, reason = check_crash_day_budget(budget_state, one_more)
+    committed_pct = n_at_cap * cfg.PER_TRADE_CAP_PCT
+    assert committed_pct <= cfg.DRAWDOWN_HARD_PCT, "even fully committed budget must not exceed the hard stop"
+    print(f"{n_at_cap} positions at the per-trade cap ({committed_pct:.0%} committed): "
+          f"one more is {'BLOCKED' if not passed else 'ALLOWED'} ({reason})")
+
     # 4. IV missing on the chosen leg.
     passed, reason = check_data_sanity(base_state, {**base_proposal, "iv_missing": True})
     assert not passed, "missing IV should block on data-sanity grounds"
@@ -261,5 +323,27 @@ if __name__ == "__main__":
     hard_passed, hard_reason = check_drawdown_hard(hard_hit, base_proposal)
     assert not soft_passed and not hard_passed
     print(f"At hard drawdown line: BLOCKED by both ({hard_reason})")
+
+    # 6. check_term_structure (W4): stale/missing data fails closed.
+    passed, reason = check_term_structure({**base_state, "vix_data_stale": True}, base_proposal)
+    assert not passed, "stale VIX data must block, not silently proceed"
+    print(f"VIX data stale: BLOCKED ({reason})")
+
+    passed, reason = check_term_structure({**base_state, "vix_contango_ratio": None}, base_proposal)
+    assert not passed, "missing contango ratio must block"
+    print(f"VIX contango ratio missing: BLOCKED ({reason})")
+
+    # 7. check_term_structure: below the trailing threshold blocks;
+    # exactly at or above it passes (mirrors the >= convention already
+    # used by the drawdown guards' at-the-line tests above).
+    flattening = {**base_state, "vix_contango_ratio": 1.05, "vix_contango_threshold": 1.12}
+    passed, reason = check_term_structure(flattening, base_proposal)
+    assert not passed, "contango below its trailing threshold must block"
+    print(f"VIX term structure flattening (1.05 < 1.12 threshold): BLOCKED ({reason})")
+
+    at_threshold = {**base_state, "vix_contango_ratio": 1.12, "vix_contango_threshold": 1.12}
+    passed, reason = check_term_structure(at_threshold, base_proposal)
+    assert passed, "contango exactly at the threshold should pass (not a strict block)"
+    print(f"VIX term structure exactly at threshold: PASS ({reason})")
 
     print("\nAll guards.py self-checks passed.")
