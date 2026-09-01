@@ -66,15 +66,81 @@ except Exception as e:
 if account_state is not None:
     n_open = len(account_state["open_positions"])
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Equity", f"${account_state['current_equity']:,.0f}")
-    col2.metric("Options buying power", f"${account_state['options_buying_power']:,.0f}")
-    col3.metric("Positions open", f"{n_open} of {MAX_CONCURRENT_POSITIONS}")
-    col4.metric("Options level", account_state["options_approved_level"])
+    col1.metric("Equity", f"${account_state['current_equity']:,.0f}",
+                help="Total account value, cash plus any open positions marked to market.")
+    col2.metric("Options buying power", f"${account_state['options_buying_power']:,.0f}",
+                help="How much the broker will let this account commit to new options positions right now.")
+    col3.metric("Positions open", f"{n_open} of {MAX_CONCURRENT_POSITIONS}",
+                help="Concurrent put credit spreads open now, against the hard cap the Guard enforces.")
+    col4.metric("Options level", account_state["options_approved_level"],
+                help="Alpaca's own broker-approved permission tier (0-3). Level 3 is required to trade "
+                     "defined-risk multi-leg spreads like this system's put credit spreads -- it's the "
+                     "account's real regulatory clearance, not something this app computes.")
 
     if n_open == 0:
         st.write("No open positions right now.")
     else:
         st.write(f"{n_open} open position(s) -- detail rendering lands with reconcile.py (post-hackathon stretch item).")
+
+st.divider()
+
+# ---------------------------------------------------------------------------
+# S1/S2 (the plan's flagship artifact): the ten-year reconstructed track
+# record, unfiltered vs the VIX term-structure filter, with SPY and cash
+# as shape-only reference lines.
+# ---------------------------------------------------------------------------
+st.subheader("Ten-year track record (reconstructed)")
+st.write(
+    "Real option prices only go back to Feb 2024, so fees before that are reconstructed from "
+    "CBOE's VIX9D and validated per volatility quartile before use -- see `EXPERIMENT.md`, "
+    "Experiment 12d. Every loss shown is computed from real SPY closes; only the credit side "
+    "before Feb 2024 is modelled."
+)
+
+curve_path = "output/data/equity_curve.csv"
+try:
+    if os.path.exists(curve_path):
+        curve_df = pd.read_csv(curve_path, parse_dates=["entry"]).set_index("entry")
+
+        st.caption("Cumulative P&L per contract, $ -- trade every week vs. the VIX term-structure filter")
+        st.line_chart(curve_df[["cum_pnl_unfiltered", "cum_pnl_filtered"]].rename(columns={
+            "cum_pnl_unfiltered": "trade every week", "cum_pnl_filtered": "VIX filter",
+        }))
+
+        def _max_dd(s: pd.Series) -> float:
+            return float((s.cummax() - s).max())
+
+        def _worst_year(df: pd.DataFrame, col: str) -> tuple[int, float]:
+            by_year = df.groupby(df.index.year)[col].sum()
+            return int(by_year.idxmin()), float(by_year.min())
+
+        dd_u, dd_f = _max_dd(curve_df["cum_pnl_unfiltered"]), _max_dd(curve_df["cum_pnl_filtered"])
+        wy_u, wy_f = _worst_year(curve_df, "pnl_unfiltered"), _worst_year(curve_df, "pnl_filtered")
+        weeks_traded = int(curve_df["traded"].sum())
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Max drawdown, $/contract", f"{dd_f:.2f}", delta=f"{dd_f - dd_u:+.2f} vs. unfiltered",
+                    delta_color="inverse", help="Peak-to-trough decline in cumulative P&L per contract.")
+        col2.metric("Worst year, filtered", f"{wy_f[1]:+.2f}", help=f"Year {wy_f[0]}. Unfiltered worst year: "
+                    f"{wy_u[1]:+.2f} in {wy_u[0]}.")
+        col3.metric("Weeks traded", f"{weeks_traded} of {len(curve_df)}",
+                    help="The filter skips a week entirely when the VIX term structure is flattening/inverting.")
+
+        with st.expander("Shape comparison against SPY and cash (indexed to 100, not dollar-matched)"):
+            st.caption(
+                "These two lines are NOT on the same $-per-contract basis as the P&L chart above -- a real "
+                "dollar comparison needs a position-sizing assumption, which is in `EXPERIMENT.md`'s portfolio-basis "
+                "Sharpe/drawdown table instead. This chart exists only to show when SPY itself was falling."
+            )
+            st.line_chart(curve_df[["spy_indexed", "cash_indexed"]].rename(columns={
+                "spy_indexed": "SPY (indexed)", "cash_indexed": "cash @ 3%/yr (indexed)",
+            }))
+    else:
+        st.warning(
+            "Reconstruction has not been computed yet. Run `python -m pipeline.backtest.reconstruct`."
+        )
+except Exception as e:
+    st.error(f"Could not render the equity curve ({e}).")
 
 st.divider()
 

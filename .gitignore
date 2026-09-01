@@ -5,6 +5,8 @@ __pycache__/
 output/data/*.csv
 !output/data/spread_backtest_results.csv
 !output/data/evidence_gate_results.csv
+!output/data/reconstruction_2016_2026.csv
+!output/data/equity_curve.csv
 output/audit/*.jsonl
 .claude/
 

@@ -169,6 +169,56 @@ def replay(a: float, b: float, distance: float = 0.03, width: float = 5.0,
     return pd.DataFrame(rows)
 
 
+EQUITY_CURVE_PATH = "output/data/equity_curve.csv"
+CONTANGO_PERCENTILE = 0.33
+CONTANGO_MIN_HISTORY = 60  # matches guards.check_term_structure / false_trip's walk-forward warmup
+
+
+def build_equity_curve(result: pd.DataFrame) -> pd.DataFrame:
+    """S1 (the plan's flagship artifact, never wired into the dashboard
+    until now): per-week cumulative P&L, unfiltered vs the VIX
+    term-structure filter, plus SPY and flat-cash reference lines.
+
+    The filter mask uses the SAME walk-forward rule the live guard and
+    false_trip.py use -- 33rd percentile of contango strictly BEFORE the
+    entry date, never a full-sample constant -- computed fresh here from
+    this replay's own contango column so the chart can't silently drift
+    from what check_term_structure would actually have done that week.
+    The first CONTANGO_MIN_HISTORY weeks have no threshold yet, so both
+    lines trade identically through the warmup, exactly as the live
+    system would (no threshold means no guard, not a blocked trade).
+    """
+    df = result.sort_values("entry").reset_index(drop=True).copy()
+
+    thresholds = [None] * len(df)
+    for i in range(len(df)):
+        if i >= CONTANGO_MIN_HISTORY:
+            thresholds[i] = df["contango"].iloc[:i].quantile(CONTANGO_PERCENTILE)
+    df["contango_threshold"] = thresholds
+    df["traded"] = df["contango_threshold"].isna() | (df["contango"] >= df["contango_threshold"])
+
+    df["pnl_unfiltered"] = df["pnl"]
+    df["pnl_filtered"] = df["pnl"].where(df["traded"], 0.0)
+    df["cum_pnl_unfiltered"] = df["pnl_unfiltered"].cumsum()
+    df["cum_pnl_filtered"] = df["pnl_filtered"].cumsum()
+
+    # Shape-only reference lines, indexed to 100 at the start -- these are
+    # NOT on the same $-per-contract basis as the P&L lines above (a
+    # portfolio-basis comparison needs a position-sizing assumption; see
+    # EXPERIMENT.md's Sharpe/drawdown table for that). Indexed purely so a
+    # reader can see when SPY itself was falling relative to the strategy.
+    df["spy_indexed"] = 100.0 * df["spot_entry"] / df["spot_entry"].iloc[0]
+    week_idx = np.arange(len(df))
+    df["cash_indexed"] = 100.0 * (1.03 ** (week_idx / 52.0))
+
+    return df
+
+
+def _max_drawdown(cum_pnl: pd.Series) -> float:
+    running_peak = cum_pnl.cummax()
+    return float((running_peak - cum_pnl).max())
+
+
 if __name__ == "__main__":
     print("Loading the 126 real (2024-2026) weeks at 3%/$5 to calibrate against...")
     real_weeks = _load_real_flagship_weeks()
@@ -212,3 +262,23 @@ if __name__ == "__main__":
 
     atomic_to_csv(result, OUTPUT_PATH, index=False)
     print(f"\nSaved to {OUTPUT_PATH}")
+
+    print("\nBuilding the equity-curve series for the dashboard (S1)...")
+    curve = build_equity_curve(result)
+
+    # Self-check: the walk-forward mask here must agree with
+    # false_trip.py's own "blocked" definition on overlapping ground --
+    # weeks before CONTANGO_MIN_HISTORY are never filtered by either.
+    warmup = curve.iloc[:CONTANGO_MIN_HISTORY]
+    assert warmup["traded"].all(), "warmup weeks (no threshold yet) must all be traded, in both curves"
+    assert (curve["cum_pnl_unfiltered"].iloc[:CONTANGO_MIN_HISTORY] ==
+            curve["cum_pnl_filtered"].iloc[:CONTANGO_MIN_HISTORY]).all(), \
+        "unfiltered and filtered curves must be identical through the warmup"
+
+    dd_unfiltered = _max_drawdown(curve["cum_pnl_unfiltered"])
+    dd_filtered = _max_drawdown(curve["cum_pnl_filtered"])
+    print(f"  Max drawdown, $/contract -- unfiltered: {dd_unfiltered:.2f}, filtered: {dd_filtered:.2f}")
+    assert dd_filtered <= dd_unfiltered, "the whole point of the filter is a shallower drawdown -- if this flips, something regressed"
+
+    atomic_to_csv(curve, EQUITY_CURVE_PATH, index=False)
+    print(f"Saved to {EQUITY_CURVE_PATH}")
