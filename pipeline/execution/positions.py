@@ -36,18 +36,30 @@ def open_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
     closes = log_df[log_df["outcome"] == "CLOSED"].dropna(subset=["short_symbol", "long_symbol"])
     closed_pairs = set(zip(closes["short_symbol"], closes["long_symbol"]))
 
+    # A cancel/reprice/resubmit (submit_with_retry) logs a later FILLED row
+    # for the same pair with the actual fill economics, which can differ
+    # from the original SOLD row's proposed credit/max-loss. Prefer the
+    # latest FILLED row per pair when one exists, so this doesn't report a
+    # stale proposed price after a reprice.
+    fills = log_df[log_df["outcome"] == "FILLED"].dropna(subset=["short_symbol", "long_symbol"])
+    latest_fill_by_pair = {}
+    if not fills.empty:
+        for _, frow in fills.sort_values("timestamp").iterrows():
+            latest_fill_by_pair[(frow["short_symbol"], frow["long_symbol"])] = frow
+
     open_positions = []
     for _, row in opens.iterrows():
         pair = (row["short_symbol"], row["long_symbol"])
         if pair in closed_pairs:
             continue
+        source = latest_fill_by_pair.get(pair, row)
         open_positions.append(
             {
                 "short_symbol": row["short_symbol"],
                 "long_symbol": row["long_symbol"],
-                "contracts": int(row["proposed_contracts"]) if pd.notna(row.get("proposed_contracts")) else 0,
-                "credit_per_contract": float(row["proposed_credit"]) if pd.notna(row.get("proposed_credit")) else 0.0,
-                "max_loss_total": float(row["proposed_max_loss"]) if pd.notna(row.get("proposed_max_loss")) else 0.0,
+                "contracts": int(source["proposed_contracts"]) if pd.notna(source.get("proposed_contracts")) else 0,
+                "credit_per_contract": float(source["proposed_credit"]) if pd.notna(source.get("proposed_credit")) else 0.0,
+                "max_loss_total": float(source["proposed_max_loss"]) if pd.notna(source.get("proposed_max_loss")) else 0.0,
                 "net_delta_share_equiv": float(row["net_delta_share_equiv"]) if pd.notna(row.get("net_delta_share_equiv")) else 0.0,
             }
         )
@@ -76,5 +88,27 @@ if __name__ == "__main__":
     empty = open_spread_positions(pd.DataFrame(columns=["outcome", "short_symbol", "long_symbol"]))
     assert empty == []
     print("Empty log: no open positions")
+
+    # A cancel/reprice/resubmit logs SOLD at the original (never-filled)
+    # price, then FILLED at the actual fill price for the same pair -- the
+    # summary must reflect the FILLED row's economics, not the stale SOLD
+    # proposal (the bug found live on 2026-09-01's T-LIVE reprice).
+    reprice_log = pd.DataFrame(
+        [
+            {"timestamp": "2026-09-01T16:38:25", "outcome": "SOLD",
+             "short_symbol": "SPY260911P00735000", "long_symbol": "SPY260911P00730000",
+             "proposed_contracts": 6, "proposed_credit": 27.0, "proposed_max_loss": 2838.0,
+             "net_delta_share_equiv": 15.42},
+            {"timestamp": "2026-09-01T17:20:30", "outcome": "FILLED",
+             "short_symbol": "SPY260911P00735000", "long_symbol": "SPY260911P00730000",
+             "proposed_contracts": 6, "proposed_credit": 22.0, "proposed_max_loss": 2868.0,
+             "net_delta_share_equiv": None},
+        ]
+    )
+    repriced = open_spread_positions(reprice_log)
+    assert len(repriced) == 1, repriced
+    assert repriced[0]["credit_per_contract"] == 22.0, repriced
+    assert repriced[0]["max_loss_total"] == 2868.0, repriced
+    print(f"Reprice: FILLED row's economics win over the stale SOLD proposal: {repriced}")
 
     print("\nAll execution/positions.py self-checks passed.")

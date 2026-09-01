@@ -25,11 +25,18 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-function metric(label, value, help) {
+function metric(label, value, help, cls) {
   const wrap = el("div");
   wrap.appendChild(el("div", { class: "metric-label", text: label }));
-  wrap.appendChild(el("div", { class: "metric-value", text: value }));
+  wrap.appendChild(el("div", { class: `metric-value${cls ? " " + cls : ""}`, text: value }));
   if (help) wrap.appendChild(el("div", { class: "metric-help", text: help }));
+  return wrap;
+}
+
+function kpiTile(label, value, cls) {
+  const wrap = el("div", { class: `kpi-tile${cls ? " " + cls : ""}` });
+  wrap.appendChild(el("div", { class: "kpi-label", text: label }));
+  wrap.appendChild(el("div", { class: `kpi-value${cls ? " " + cls : ""}`, text: value }));
   return wrap;
 }
 
@@ -104,10 +111,14 @@ function renderAccount(account) {
     box.appendChild(el("p", { class: "card-note", text: `Live account data unavailable right now (${account ? account.reason : "no response"}).` }));
     return;
   }
-  box.appendChild(metric("Equity", fmtMoney(account.equity)));
-  box.appendChild(metric("Cash", fmtMoney(account.cash)));
-  box.appendChild(metric("Options buying power", fmtMoney(account.options_buying_power)));
-  box.appendChild(metric("Positions open", String(account.positions.length)));
+  const unrealized = account.positions.reduce((sum, p) => sum + (p.unrealized_pl || 0), 0);
+  box.appendChild(kpiTile("Equity", fmtMoney(account.equity), "accent"));
+  box.appendChild(kpiTile("Cash", fmtMoney(account.cash)));
+  box.appendChild(kpiTile("Options buying power", fmtMoney(account.options_buying_power)));
+  box.appendChild(kpiTile("Open positions", String(account.positions.length)));
+  if (account.positions.length > 0) {
+    box.appendChild(kpiTile("Unrealized P&L", fmtMoney2(unrealized), unrealized >= 0 ? "good" : "bad"));
+  }
 }
 
 function renderMarket(overview) {
@@ -183,7 +194,20 @@ function renderPositions(overview, account) {
     const tr = el("tr");
     tr.appendChild(el("td", { text: p.underlying }));
     tr.appendChild(el("td", { text: p.strikes }));
-    tr.appendChild(el("td", { class: "num", text: p.room_pct !== null ? fmtPctSigned(p.room_pct) : "N/A" }));
+    const roomCell = el("td", { class: "num" });
+    if (p.room_pct !== null) {
+      const barCap = 0.15;
+      const fillPct = Math.max(0, Math.min(100, (Math.abs(p.room_pct) / barCap) * 100));
+      const wrap = el("span", { class: "room-cell" });
+      const bar = el("span", { class: "mini-bar" });
+      bar.appendChild(el("span", { class: `mini-bar-fill${p.room_pct < 0.02 ? " bad" : ""}`, style: `width:${fillPct}%` }));
+      wrap.appendChild(bar);
+      wrap.appendChild(document.createTextNode(fmtPctSigned(p.room_pct)));
+      roomCell.appendChild(wrap);
+    } else {
+      roomCell.textContent = "N/A";
+    }
+    tr.appendChild(roomCell);
     tr.appendChild(el("td", { class: "num", text: p.expires_days !== null ? `${p.expires_days}d` : "N/A" }));
     tr.appendChild(el("td", { class: "num", text: String(p.qty) }));
     tr.appendChild(el("td", { class: "num", text: fmtMoney2(p.collected) }));

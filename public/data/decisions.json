@@ -1,12 +1,26 @@
 {
   "summary": {
-    "total": 2,
-    "traded": 0,
+    "total": 4,
+    "traded": 1,
     "guard_blocked": 2,
     "reviewer_vetoed": 0,
     "dry_run": 0
   },
   "rows": [
+    {
+      "timestamp": "2026-09-01T17:20:30.993276+00:00",
+      "mode": "AUTO",
+      "outcome": "FILLED",
+      "category": "Other",
+      "reason": ""
+    },
+    {
+      "timestamp": "2026-09-01T16:38:25.479464+00:00",
+      "mode": "AUTO",
+      "outcome": "SOLD",
+      "category": "Traded",
+      "reason": "SPY260911P00735000 / SPY260911P00730000, 6.0 contract(s)"
+    },
     {
       "timestamp": "2026-09-01T02:45:04.955715+00:00",
       "mode": "MANUAL",

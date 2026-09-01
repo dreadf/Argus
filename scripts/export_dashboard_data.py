@@ -65,14 +65,14 @@ def _status_from_row(latest_row) -> dict:
         return {"cls": "neutral", "word": "Not yet run", "rest": "no decisions logged today.", "timestamp": ""}
     outcome = _clean(latest_row.get("outcome"))
     ts = str(latest_row.get("timestamp", ""))
-    if outcome == "SOLD":
+    if outcome in ("SOLD", "FILLED"):
         n = _clean(latest_row.get("proposed_contracts"))
         return {"cls": "good", "word": "Trading",
                 "rest": f"opened {latest_row.get('short_symbol')} / {latest_row.get('long_symbol')}, {n if n is not None else '?'} contract(s).",
                 "timestamp": ts}
     if outcome == "DRY_RUN":
         return {"cls": "neutral", "word": "Dry run",
-                "rest": f"would have opened {latest_row.get('short_symbol')} / {latest_row.get('long_symbol')} -- no real order sent.",
+                "rest": f"would have opened {latest_row.get('short_symbol')} / {latest_row.get('long_symbol')}. No real order sent.",
                 "timestamp": ts}
     if outcome == "SKIPPED":
         reasons = latest_row.get("guards_failed")
@@ -97,8 +97,8 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
 
     if latest_row is None:
         rows.append({"stage": "2. Guards", "cls": "neutral", "detail": "no decision logged today"})
-        rows.append({"stage": "3. Reviewer", "cls": "neutral", "detail": "--"})
-        rows.append({"stage": "4. Order", "cls": "neutral", "detail": "--"})
+        rows.append({"stage": "3. Reviewer", "cls": "neutral", "detail": "n/a"})
+        rows.append({"stage": "4. Order", "cls": "neutral", "detail": "n/a"})
         return rows
 
     guards_checked = _clean(latest_row.get("guards_checked"))
@@ -108,7 +108,7 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
         rows.append({"stage": "2. Guards", "cls": "neutral", "detail": "not reached today"})
     elif has_failures:
         rows.append({"stage": "2. Guards", "cls": "bad",
-                     "detail": f"{int(guards_checked)} checked -- blocked: " + "; ".join(str(g) for g in guards_failed)})
+                     "detail": f"{int(guards_checked)} checked, blocked: " + "; ".join(str(g) for g in guards_failed)})
     else:
         rows.append({"stage": "2. Guards", "cls": "good", "detail": f"all {int(guards_checked)} passed"})
 
@@ -118,12 +118,13 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
     else:
         reviewer_reason = _clean(latest_row.get("reviewer_reason")) or ""
         r_cls = "good" if reviewer_decision == "APPROVE" else ("bad" if reviewer_decision == "VETO" else "neutral")
-        rows.append({"stage": "3. Reviewer", "cls": r_cls, "detail": f"{reviewer_decision} -- {reviewer_reason}"})
+        rows.append({"stage": "3. Reviewer", "cls": r_cls, "detail": f"{reviewer_decision}: {reviewer_reason}"})
 
     outcome_map = {
         "SOLD": ("good", "sent live"),
+        "FILLED": ("good", "sent live, filled"),
         "DRY_RUN": ("neutral", "dry run, no order sent"),
-        "SKIPPED": ("bad", "never reached -- blocked upstream"),
+        "SKIPPED": ("bad", "never reached, blocked upstream"),
         "CLOSED": ("neutral", "position closed"),
         "EMERGENCY_CLOSE_ORPHAN": ("bad", "emergency close"),
     }
@@ -186,11 +187,11 @@ def build_overview() -> dict:
         }
         if ratio is not None:
             if ratio > 1.15:
-                v_cls, v_text = "good", "Rich -- selling is well compensated right now"
+                v_cls, v_text = "good", "Rich: selling is well compensated right now"
             elif ratio < 0.85:
-                v_cls, v_text = "bad", "Thin -- selling isn't well compensated right now"
+                v_cls, v_text = "bad", "Thin: selling isn't well compensated right now"
             else:
-                v_cls, v_text = "neutral", "Fair -- normal compensation"
+                v_cls, v_text = "neutral", "Fair: normal compensation"
             volatility = {"vix9d_decimal": vix9d_decimal, "rv10d": rv10d, "ratio": ratio, "verdict_class": v_cls, "verdict_text": v_text}
     except Exception as e:
         market_error = str(e)

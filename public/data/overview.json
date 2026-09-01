@@ -1,23 +1,23 @@
 {
   "status": {
-    "cls": "bad",
-    "word": "Declined to trade",
-    "rest": "check_market_open",
-    "timestamp": "2026-09-01T02:45:04.955715+00:00"
+    "cls": "good",
+    "word": "Trading",
+    "rest": "opened SPY260911P00735000 / SPY260911P00730000, 6.0 contract(s).",
+    "timestamp": "2026-09-01T17:20:30.993276+00:00"
   },
   "market": {
-    "spot": 762.075,
-    "yesterday_move_pct": -0.005952769048209072,
+    "spot": 761.13,
+    "yesterday_move_pct": -0.0074980113969773665,
     "contango": 1.4205834683954621,
     "contango_threshold": 1.119811583238015
   },
   "market_error": null,
   "volatility": {
     "vix9d_decimal": 0.1234,
-    "rv10d": 0.07542438146024338,
-    "ratio": 1.6360757305652527,
+    "rv10d": 0.07881841185167046,
+    "ratio": 1.5656240350570407,
     "verdict_class": "good",
-    "verdict_text": "Rich -- selling is well compensated right now"
+    "verdict_text": "Rich: selling is well compensated right now"
   },
   "decision_path": [
     {
@@ -37,9 +37,21 @@
     },
     {
       "stage": "4. Order",
-      "cls": "bad",
-      "detail": "never reached -- blocked upstream"
+      "cls": "good",
+      "detail": "sent live, filled"
     }
   ],
-  "open_positions": []
+  "open_positions": [
+    {
+      "short_symbol": "SPY260911P00735000",
+      "long_symbol": "SPY260911P00730000",
+      "underlying": "SPY",
+      "strikes": "SELL $735.00P / BUY $730.00P",
+      "room_pct": 0.03433053486263844,
+      "expires_days": 9,
+      "qty": 6,
+      "collected": 132.0,
+      "max_loss": 2868.0
+    }
+  ]
 }
