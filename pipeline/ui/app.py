@@ -49,49 +49,74 @@ CONTROLS_ENABLED = os.getenv("CONTROLS_ENABLED", "false").lower() in ("true", "1
 
 st.set_page_config(page_title="Evidence Gate", page_icon="📉", layout="wide")
 
-# Design tokens are set in .streamlit/config.toml (theme colors -- native
-# widgets like st.dataframe and st.metric read those directly; CSS cannot
-# reach inside their canvas-rendered internals). This block covers what
-# config.toml can't: typography and the status line below. Deliberately
-# plain -- an earlier pass used rounded pill badges and tinted color-coded
-# boxes for status, which read as a generic dashboard template rather
-# than a considered tool. Kept to one accent, used sparingly, and plain
-# text doing the actual communicating instead of color-coding.
+# Design tokens: a warm-neutral "instrument panel" system, grounded in the
+# subject rather than generic fintech-dark-mode. Palette set in
+# .streamlit/config.toml (native widgets like st.dataframe/st.metric read
+# theme colors directly -- CSS cannot reach inside their canvas-rendered
+# internals); this block covers typography and the status readout.
+#
+# IBM Plex Sans/Mono instead of Inter/JetBrains Mono -- Inter is a
+# well-known "safe default" that most AI-generated interfaces reach for,
+# which is exactly the generic-template read this page was getting
+# flagged for. Plex was designed for technical/engineering seriousness
+# and its Sans and Mono cuts share real DNA, which Inter+an unrelated
+# mono face doesn't. Fraunces (a serif with actual character) is used
+# ONLY for the page title, for a ledger/instrument-label feel, without
+# making the rest of the page decorative.
+#
+# State is communicated by colored TEXT (the status readout, chart
+# lines), never a tinted pill or a rounded card with an accent bar --
+# both of those are exactly the templated pattern that was flagged.
+# Semantic colors (good/caution/danger) are kept distinct from the one
+# brand accent (amber), not the same hue doing double duty.
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
 
-    html, body, [class*="css"] { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
+    html, body, [class*="css"] { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif; }
 
     /* Financial figures: tabular numerals so columns of dollar amounts
        align, same convention terminals and trading UIs use. */
     [data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-family: 'IBM Plex Mono', 'SF Mono', monospace;
         font-variant-numeric: tabular-nums;
         font-weight: 500;
     }
-    [data-testid="stMetricLabel"] { font-size: 0.8rem; color: #8B95A1; }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem; color: #93897A; }
 
-    h1 { font-weight: 600; }
+    h1.page-title {
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 600;
+        font-size: 2.1rem;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.15rem;
+    }
     h2, h3 { font-weight: 600; }
 
-    .subtitle { color: #8B95A1; font-size: 0.92rem; margin-top: -0.5rem; margin-bottom: 1.1rem; }
+    .subtitle { color: #93897A; font-size: 0.92rem; margin-bottom: 1.2rem; }
 
-    .status-line {
-        border-left: 2px solid #3A4452;
-        padding: 0.15rem 0 0.15rem 0.9rem;
-        margin-bottom: 1.3rem;
+    .status-readout { margin-bottom: 1.4rem; }
+    .status-readout .label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+        margin-bottom: 0.2rem;
     }
-    .status-line .label { font-size: 0.75rem; color: #8B95A1; margin-bottom: 0.1rem; }
-    .status-line .headline { font-size: 1.05rem; }
-    .status-line .meta { font-size: 0.8rem; color: #6B7280; margin-top: 0.15rem; }
+    .status-readout .label.good { color: #5B8A5A; }
+    .status-readout .label.caution { color: #B5502E; }
+    .status-readout .label.danger { color: #9C3B3B; }
+    .status-readout .label.neutral { color: #93897A; }
+    .status-readout .headline { font-size: 1.05rem; color: #EDE6D8; }
+    .status-readout .meta {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.78rem; color: #6B6357; margin-top: 0.2rem;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown("# Evidence Gate")
+st.markdown('<h1 class="page-title">Evidence Gate</h1>', unsafe_allow_html=True)
 mode_text = "Controls enabled, local session" if CONTROLS_ENABLED else "Read-only, public deployment"
 st.markdown(
     f'<p class="subtitle">{mode_text} &mdash; an options agent that sells S&amp;P 500 volatility premium only when '
@@ -192,12 +217,14 @@ def _worst_year(df: pd.DataFrame, col: str) -> tuple[int, float]:
 # Derived from the most recent logged decision, not a fresh computation --
 # it should say exactly what the audit log says happened, nothing more.
 # ---------------------------------------------------------------------------
-def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str]:
-    """Returns (label, headline, meta)."""
+def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str, str]:
+    """Returns (semantic_class, label, headline, meta). semantic_class is
+    one of good/caution/danger/neutral -- kept distinct from the page's
+    amber brand accent, same discipline as the evidence-gate/chart colors."""
     if log_df is None:
-        return "Status unknown", "Could not read the decision log.", ""
+        return "neutral", "Status unknown", "Could not read the decision log.", ""
     if log_df.empty:
-        return "Not yet run", "No decisions logged yet -- the agent hasn't run today.", ""
+        return "neutral", "Not yet run", "No decisions logged yet -- the agent hasn't run today.", ""
 
     latest = log_df.sort_values("timestamp", ascending=False).iloc[0]
     outcome = latest.get("outcome")
@@ -205,12 +232,12 @@ def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str]:
     meta = f"Last decision: {ts}"
 
     if outcome == "SOLD":
-        return ("Trading",
+        return ("good", "Trading",
                 f"Opened {latest.get('short_symbol')} / {latest.get('long_symbol')}, "
                 f"{int(latest['proposed_contracts']) if pd.notna(latest.get('proposed_contracts')) else '?'} contract(s).",
                 meta)
     if outcome == "DRY_RUN":
-        return ("Dry run",
+        return ("neutral", "Dry run",
                 f"Would have opened {latest.get('short_symbol')} / {latest.get('long_symbol')} "
                 "-- dry-run mode, no real order sent.", meta)
     if outcome == "SKIPPED":
@@ -219,19 +246,19 @@ def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str]:
             reason_text = "; ".join(str(r) for r in reasons)
         else:
             reason_text = "No reason recorded."
-        return ("Declined to trade today", reason_text, meta)
+        return ("caution", "Declined to trade today", reason_text, meta)
     if outcome == "CLOSED":
-        return ("Position closed", str(latest.get("close_reason", "")), meta)
+        return ("neutral", "Position closed", str(latest.get("close_reason", "")), meta)
     if outcome == "EMERGENCY_CLOSE_ORPHAN":
-        return ("Emergency close", str(latest.get("close_reason", "")), meta)
-    return (str(outcome), "", meta)
+        return ("danger", "Emergency close", str(latest.get("close_reason", "")), meta)
+    return ("neutral", str(outcome), "", meta)
 
 
-hero_label, hero_headline, hero_meta = _status_hero(log_df)
+hero_class, hero_label, hero_headline, hero_meta = _status_hero(log_df)
 st.markdown(
     f"""
-    <div class="status-line">
-        <div class="label">{hero_label}</div>
+    <div class="status-readout">
+        <div class="label {hero_class}">{hero_label}</div>
         <div class="headline">{hero_headline}</div>
         <div class="meta">{hero_meta}</div>
     </div>
@@ -364,7 +391,7 @@ with tab_track_record:
             curve_df[["cum_pnl_unfiltered", "cum_pnl_filtered"]].rename(columns={
                 "cum_pnl_unfiltered": "trade every week", "cum_pnl_filtered": "VIX filter",
             }),
-            color=["#F2A65A", "#4C8BF5"],  # amber = unfiltered (what breaks in 2018), blue = the filter we recommend
+            color=["#C9722E", "#5B8A5A"],  # amber = unfiltered (exposed to the volatility spike that breaks 2018), sage = the filter we recommend
         )
 
         dd_u, dd_f = _max_dd(curve_df["cum_pnl_unfiltered"]), _max_dd(curve_df["cum_pnl_filtered"])
@@ -389,7 +416,7 @@ with tab_track_record:
                 curve_df[["spy_indexed", "cash_indexed"]].rename(columns={
                     "spy_indexed": "SPY (indexed)", "cash_indexed": "cash @ 3%/yr (indexed)",
                 }),
-                color=["#8B95A1", "#4C5A6B"],
+                color=["#93897A", "#4A4438"],
             )
 
 # ---------------------------------------------------------------------------
