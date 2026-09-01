@@ -52,10 +52,11 @@ st.set_page_config(page_title="Evidence Gate", page_icon="📉", layout="wide")
 # Design tokens are set in .streamlit/config.toml (theme colors -- native
 # widgets like st.dataframe and st.metric read those directly; CSS cannot
 # reach inside their canvas-rendered internals). This block covers what
-# config.toml can't: typography, spacing, and the custom elements below
-# (mode badge, status hero, metric-card borders). Inter is a free Google
-# Font used as the shared substrate under most fintech dashboards'
-# typography, not a clone of any one product's proprietary system.
+# config.toml can't: typography and the status line below. Deliberately
+# plain -- an earlier pass used rounded pill badges and tinted color-coded
+# boxes for status, which read as a generic dashboard template rather
+# than a considered tool. Kept to one accent, used sparingly, and plain
+# text doing the actual communicating instead of color-coding.
 st.markdown(
     """
     <style>
@@ -70,69 +71,31 @@ st.markdown(
         font-variant-numeric: tabular-nums;
         font-weight: 500;
     }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.8rem;
-        letter-spacing: 0.02em;
-        color: #8B95A1;
-        text-transform: uppercase;
-    }
-    [data-testid="stMetric"] {
-        background: #141A21;
-        border: 1px solid #232B35;
-        border-radius: 10px;
-        padding: 1rem 1.1rem 0.6rem 1.1rem;
-    }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem; color: #8B95A1; }
 
-    h1 { font-weight: 700; letter-spacing: -0.02em; }
-    h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-weight: 600; }
+    h2, h3 { font-weight: 600; }
 
-    .mode-badge {
-        display: inline-block;
-        padding: 0.15rem 0.65rem;
-        border-radius: 999px;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        vertical-align: middle;
-        margin-left: 0.6rem;
-    }
-    .mode-badge.readonly { background: rgba(76, 139, 245, 0.15); color: #7CA6F5; border: 1px solid rgba(76, 139, 245, 0.35); }
-    .mode-badge.local { background: rgba(242, 166, 90, 0.15); color: #F2A65A; border: 1px solid rgba(242, 166, 90, 0.35); }
+    .subtitle { color: #8B95A1; font-size: 0.92rem; margin-top: -0.5rem; margin-bottom: 1.1rem; }
 
-    .eyebrow { color: #8B95A1; font-size: 0.85rem; margin-top: -0.6rem; margin-bottom: 1rem; }
-
-    /* The status hero -- the one thing a first-time viewer should read
-       before anything else. Color signals the category at a glance;
-       the sentence next to it carries the actual reason. */
-    .status-hero {
-        border-radius: 12px;
-        padding: 1.1rem 1.4rem;
-        margin-bottom: 1.4rem;
-        border: 1px solid;
+    .status-line {
+        border-left: 2px solid #3A4452;
+        padding: 0.15rem 0 0.15rem 0.9rem;
+        margin-bottom: 1.3rem;
     }
-    .status-hero.trading { background: rgba(55, 182, 121, 0.10); border-color: rgba(55, 182, 121, 0.4); }
-    .status-hero.declined { background: rgba(242, 166, 90, 0.10); border-color: rgba(242, 166, 90, 0.4); }
-    .status-hero.neutral { background: rgba(139, 149, 161, 0.10); border-color: rgba(139, 149, 161, 0.35); }
-    .status-hero .label {
-        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-        color: #8B95A1; margin-bottom: 0.25rem;
-    }
-    .status-hero .headline { font-size: 1.15rem; font-weight: 600; }
-    .status-hero .meta { font-size: 0.82rem; color: #8B95A1; margin-top: 0.3rem; }
+    .status-line .label { font-size: 0.75rem; color: #8B95A1; margin-bottom: 0.1rem; }
+    .status-line .headline { font-size: 1.05rem; }
+    .status-line .meta { font-size: 0.8rem; color: #6B7280; margin-top: 0.15rem; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-badge_class, badge_text = ("local", "controls enabled, local") if CONTROLS_ENABLED else ("readonly", "read-only, public")
+st.markdown("# Evidence Gate")
+mode_text = "Controls enabled, local session" if CONTROLS_ENABLED else "Read-only, public deployment"
 st.markdown(
-    f'<h1 style="margin-bottom:0;">Evidence Gate <span class="mode-badge {badge_class}">{badge_text}</span></h1>',
-    unsafe_allow_html=True,
-)
-st.markdown(
-    '<p class="eyebrow">An options agent that sells S&P 500 volatility premium only when the measured '
-    "edge clears a statistical bar &mdash; and refuses to trade when it doesn't.</p>",
+    f'<p class="subtitle">{mode_text} &mdash; an options agent that sells S&amp;P 500 volatility premium only when '
+    "the measured edge clears a statistical bar, and refuses to trade when it doesn't.</p>",
     unsafe_allow_html=True,
 )
 
@@ -176,8 +139,15 @@ try:
     from pipeline.options.chain import get_spot
     from pipeline.options.vol import fetch_recent_closes
 
+    from pipeline.data.vix import refresh_vix_cache
+
     _spot = get_spot()
     _closes = fetch_recent_closes()
+    # A fresh Streamlit Cloud container has no cache file on disk at all
+    # (it's gitignored, same as the audit log -- generated state, not
+    # source) -- refresh before reading, same order run_agent.py uses,
+    # so the dashboard self-heals on first load instead of erroring.
+    refresh_vix_cache()
     _vix9d = load_cached_vix("VIX9D")
     _vix3m = load_cached_vix("VIX3M")
     _, _contango_threshold = current_contango_and_threshold()
@@ -222,12 +192,12 @@ def _worst_year(df: pd.DataFrame, col: str) -> tuple[int, float]:
 # Derived from the most recent logged decision, not a fresh computation --
 # it should say exactly what the audit log says happened, nothing more.
 # ---------------------------------------------------------------------------
-def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str, str]:
-    """Returns (css_class, label, headline, meta)."""
+def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str]:
+    """Returns (label, headline, meta)."""
     if log_df is None:
-        return "neutral", "STATUS UNKNOWN", "Could not read the decision log.", ""
+        return "Status unknown", "Could not read the decision log.", ""
     if log_df.empty:
-        return "neutral", "NOT YET RUN", "No decisions logged yet -- the agent hasn't run today.", ""
+        return "Not yet run", "No decisions logged yet -- the agent hasn't run today.", ""
 
     latest = log_df.sort_values("timestamp", ascending=False).iloc[0]
     outcome = latest.get("outcome")
@@ -235,12 +205,12 @@ def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str, str]:
     meta = f"Last decision: {ts}"
 
     if outcome == "SOLD":
-        return ("trading", "TRADING",
+        return ("Trading",
                 f"Opened {latest.get('short_symbol')} / {latest.get('long_symbol')}, "
                 f"{int(latest['proposed_contracts']) if pd.notna(latest.get('proposed_contracts')) else '?'} contract(s).",
                 meta)
     if outcome == "DRY_RUN":
-        return ("neutral", "DRY RUN",
+        return ("Dry run",
                 f"Would have opened {latest.get('short_symbol')} / {latest.get('long_symbol')} "
                 "-- dry-run mode, no real order sent.", meta)
     if outcome == "SKIPPED":
@@ -249,18 +219,18 @@ def _status_hero(log_df: pd.DataFrame | None) -> tuple[str, str, str, str]:
             reason_text = "; ".join(str(r) for r in reasons)
         else:
             reason_text = "No reason recorded."
-        return ("declined", "DECLINED TO TRADE TODAY", reason_text, meta)
+        return ("Declined to trade today", reason_text, meta)
     if outcome == "CLOSED":
-        return ("neutral", "POSITION CLOSED", str(latest.get("close_reason", "")), meta)
+        return ("Position closed", str(latest.get("close_reason", "")), meta)
     if outcome == "EMERGENCY_CLOSE_ORPHAN":
-        return ("declined", "EMERGENCY CLOSE", str(latest.get("close_reason", "")), meta)
-    return ("neutral", str(outcome), "", meta)
+        return ("Emergency close", str(latest.get("close_reason", "")), meta)
+    return (str(outcome), "", meta)
 
 
-hero_class, hero_label, hero_headline, hero_meta = _status_hero(log_df)
+hero_label, hero_headline, hero_meta = _status_hero(log_df)
 st.markdown(
     f"""
-    <div class="status-hero {hero_class}">
+    <div class="status-line">
         <div class="label">{hero_label}</div>
         <div class="headline">{hero_headline}</div>
         <div class="meta">{hero_meta}</div>
@@ -299,23 +269,6 @@ with tab_overview:
         col1.metric("Equity", f"${account_state['current_equity']:,.0f}")
         col2.metric("Positions open", f"{len(raw_positions)} of {MAX_CONCURRENT_POSITIONS}",
                     help="Concurrent put credit spreads open now, against the hard cap the Guard enforces.")
-
-    st.write("")
-    st.markdown("##### Manual controls")
-    st.caption(
-        "This system is fully autonomous by design -- these are shown disabled rather than left out, "
-        "so the restriction is visible instead of silent."
-    )
-    c1, c2 = st.columns(2)
-    c1.button(
-        "Approve today's proposal", disabled=True,
-        help="There is no manual approval step by design -- the Guard and Reviewer decide autonomously.",
-    )
-    c2.button(
-        "Force-close all positions", disabled=True,
-        help="Reserved for a local session with CONTROLS_ENABLED=true, never the public deployment -- "
-             "this connects to a real brokerage account.",
-    )
 
     st.write("")
     st.markdown("##### Today's SPY & volatility snapshot")
