@@ -441,6 +441,250 @@ Real bid-ask spreads on these exact far-OTM SPY puts, checked live, run $0.01-$0
 
 ---
 
+## Experiment 12 — Live cost calibration, an expiry-selection bug, the Reviewer stage, and a ten-year reconstruction
+
+**Context:** four pieces of work on the live-trading side of the options system, done together because each one changed a number the next one depended on. Numbering coordinated directly with a concurrent session (see the Experiments 13+ header below) to avoid a collision.
+
+### 12a — The evidence gate's cost model was wired but never fed a real number
+
+`evidence_gate.py`'s `required_win_rate` formula already used a slippage-adjusted `net_credit`, from an earlier fix -- but the backtest CSV it read from was always generated with `slippage_per_share=0.0`, so the cost-awareness was a no-op in practice. `selector.choose_distance_width` tie-broke on raw `cushion_se`, which is highest exactly where credit is thinnest (3%/$1's cushion of 3.28 SE was the best in Experiment 11's table, but its mean P&L goes negative under any real cost, per the addendum above).
+
+**First attempt used an invented number and it backfired instructively.** Reasoning loosely from the addendum's "$0.01-$0.05 wide" quote, tried a 2c/leg (4c/spread) assumption. Fed into the gate's own formula, that number emptied it completely -- **zero of 24 cells clear 2 SE at 4c/spread.** Rather than quietly pick a smaller number because it keeps a trade alive (the exact pattern Guard #8's 0.08→0.04→0.0 history is a documented warning against, PROGRESS.md), the number was replaced with a live measurement: fetched the real chain (2026-09-01, spot $766.87, 8 DTE) and read the actual bid/ask on both legs of every (distance, width) cell the gate considers. Every liquid candidate (OI in the hundreds to tens of thousands) quoted at the **$0.01 minimum tick**, both legs, at every distance from 2% to 4%. Using the standard half-spread-per-leg convention (Rule #8 limits at mid): 0.005 + 0.005 = **$0.01/spread**, now `DEFAULT_SLIPPAGE_PER_SHARE` in `risk/options_config.py`.
+
+At that measured cost, **3 of 24 cells still clear 2 SE** (3%/$1, $2, $5, same set as Experiment 11's zero-cost table), and the cost-adjusted tie-break (`mean_net_pnl`, added to `evidence_gate.compute_gate`'s output) now picks **3%/$5** instead of 3%/$1 -- the width whose live open interest can actually support the order (see 12b). Known limitation: one snapshot, one calm day; spreads widen in stress, which is exactly when the new term-structure guard (12d) is designed to skip trading anyway, so the two aren't independent, but this number shouldn't be read as a stress-period estimate.
+
+### 12b — `choose_expiry` was violating "trade what was measured," and it explains a real live block
+
+The Picker's first live run (documented in `PROGRESS.md`, Aug 31) was blocked by the liquidity guard on a $1-off-grid strike (OI 22 vs the 500 minimum). Fixing the strike to round to the nearest **$5 increment** (matching where SPY open interest actually concentrates) improved it to OI 386 on a live re-check -- real, but still short of 500.
+
+Investigating why surfaced a second, independent bug: `spread_backtest.py`'s `_fridays_between` generates **Friday-only** entry/expiry dates -- every win rate and cushion in the evidence gate was measured on Friday-to-Friday cycles exclusively. But `choose_expiry`'s implementation picked whichever listed expiry was nearest to 7 DTE with **no weekday filter**, which can silently select a Wednesday expiry the backtest never tested. Confirmed live: the untested Wed 2026-09-09 expiry's 3% strike quoted **OI=386**; the identical strike on the tested Fri 2026-09-11 expiry quoted **OI=35,231** -- two orders of magnitude more. Restricting `choose_expiry` to Friday-only turned the live pipeline from BLOCKED to **PASS** end to end (all 14 guards), on real market data, same day.
+
+### 12c — The Reviewer stage is built
+
+Third stage of Picker → Guard → Reviewer. `pipeline/reviewer/reviewer.py`: Gemini reviews a Guard-approved proposal plus one real read-only account-context fetch through the existing MCP server (`get_account_info`), and may APPROVE, SHRINK (multiplier 0-1), or VETO. The safety property -- can only shrink or veto, never raise size, never originate a proposal -- is enforced by `apply_reviewer_decision`, a pure function with no LLM or network dependency, not by the prompt: any multiplier outside [0,1], any unrecognized decision string, and any exception from the network call itself (auth, timeout, quota) all clamp to a same-or-fewer-contracts result. Verified with 9 offline self-checks including the adversarial case (a simulated response asking to raise size 5x is clamped to 1.0x) and one live end-to-end call (real MCP fetch + real Gemini call, decision APPROVE, multiplier 1.0, correct reasoning). Wired into `run_agent.py` between guard-pass and order submission.
+
+### 12d — Reconstructing 2016-2026 found a real strike-rounding interaction the earlier scratch analysis missed
+
+**The point of this sub-experiment is the validation gate, not the reconstruction itself.** Real option prices only go back to Feb 2024 (confirmed the calmest stretch of available history in earlier informal analysis this session -- SPY fell >3% in a week 2.3% of the time in that window vs 8.5% in 2020-2023). Testing further back needs the fee modelled, since option prices don't exist that far back; the loss side never needs modelling, since it only needs real SPY closes (fetched to 2016 via `fetch_spy_history.py`, chunked into ~2-year windows after a full-range request was consistently rejected by the SIP feed with "does not permit querying recent SIP data" -- not transient, reproduced 3x; bisecting the same total range into yearly windows succeeded on SIP every time, recovering the genuine full history rather than falling back to IEX, which was confirmed to carry SPY only from 2018-11-01 onward).
+
+**The fee side is modelled from CBOE's VIX9D** (9-day implied vol, free since 2011, closest published instrument to this strategy's tenor) via Black-Scholes with a level-dependent skew multiplier `k(vol) = a + b·VIX9D`, fit by grid search against the real 126 weeks. **The validation gate this exists to demonstrate:** an earlier attempt at this exact reconstruction, informally, used trailing realized volatility instead of VIX9D and had an aggregate correlation of 0.649 -- reported as one number, that looks acceptable. Split by volatility quartile, it priced calm weeks at **3% of reality** and volatile weeks at **125% of reality**, two opposite-signed errors that cancelled into a false aggregate and produced a completely wrong finding (a safety guard appearing to destroy 66% of profit) that had to be retracted before it reached this file. `reconstruct.py`'s `validate_reconstruction` makes that failure structural rather than something that has to be caught by chance: it checks the model/real ratio **per volatility quartile** and raises rather than proceeding if any quartile drifts outside [0.95, 1.05]. The corrected VIX9D model passes at fit `k(vol) = 1.18 − 0.95·VIX9D`, correlation 0.972, quartile ratios 0.98-1.03.
+
+**A real, material correction found only by building this as committed code instead of scratch analysis.** The replay must use the SAME strike rule the live system actually trades (12b's $5-increment rounding), and an earlier informal version of this reconstruction had used the old $1-increment rule instead. Isolated side by side on identical inputs:
+
+| | old $1-rule (superseded) | **correct $5-rule (live)** |
+|---|---|---|
+| 2018 total P&L | -16.40 | **-9.89** |
+| Full-period (2016-2026) total | +38.28 | **+24.03** |
+
+Both numbers move, and not uniformly: rounding to the nearest $5 buys more distance from spot on every week where the raw target wasn't already a multiple of 5, which trims premium collected everywhere. That reduces realized losses in most years but **not all** -- 2020 flips from a thin positive (+0.36 old) to a small loss (**-2.43 new**), because COVID's crash was severe enough that a few extra percent of distance barely changed whether the position was breached, while the extra distance still gave up premium on every other week that year. This is the same "further out isn't a free lunch" pattern found earlier this session (no distance survives 2022 either), now showing up as an interaction with the strike-rounding fix specifically. **Any number from the earlier informal reconstruction (this session's chat, not previously committed anywhere) is superseded by the figures in this entry.**
+
+**The VIX term-structure filter, recomputed on the corrected data (portfolio basis: 2 concurrent positions at the 3% per-trade cap, $0.01/spread live-measured cost from 12a, idle weeks earning 3% cash, walk-forward 33rd-percentile threshold on VIX3M/VIX9D, fit only on prior weeks):**
+
+| | annual return | volatility | Sharpe | max drawdown |
+|---|---|---|---|---|
+| trade every week | 3.20% | 7.20% | **0.03** | 21.24% |
+| **VIX term-structure filter** | 3.56% | 3.27% | **0.17** | **5.63%** |
+
+The base case is barely profitable at all under the corrected strike rule (Sharpe 0.03) -- the filter is not optional polish on a good strategy, it is most of what makes this one defensible. Ex-2018, the filter still costs Sharpe (0.29 → 0.20) while cutting the drawdown from 15.64% to 5.63%; it improves 3 of 10 years and costs 7, with the entire net full-sample benefit concentrated in 2018 (+10.15 of the delta) and 2020 (+4.22). **This remains insurance, not an edge** -- the same conclusion as the earlier informal version of this analysis, just at corrected magnitudes.
+
+**Independent cross-validation from a completely different method (Experiment 13, concurrent session):** a direct statistical test of whether VIX/VIX3M predicts the weekly overpricing gap, on 19 years of data, found no usable correlation in general (wrong sign in the full sample) -- but investigating why backwardation's effect flips in 2013-2019 found 20 of 25 backwardation weeks in that stretch were false alarms and only 5 were real, clustered on **2015 and 2018**, the same years this portfolio backtest independently found the term-structure filter's entire benefit concentrated in. Two unrelated methods -- a statistical mechanism test on individual weeks and a portfolio backtest on realized P&L -- landing on the same shape (bad at predicting typical weeks, good at flagging rare crises) is stronger evidence than either alone. It also sharpens the honest limitation already stated above: the signal's value is concentrated in a small number of real events, not spread evenly across time, which is a reason to keep the filter as tail insurance and a reason not to oversell its Sharpe contribution in a normal year.
+
+**Known limitations, unchanged from the informal version:** fees before Feb 2024 are modelled, not real, though now validated per-quartile rather than in aggregate. The headline still rests substantially on one year (2018) and one crisis. A fee-level filter (skip weeks where the offered credit was small) was tested and does nothing -- 2018 stays a large loss at every threshold tried; logged here as the negative result it is, not repeated as a positive claim anywhere in this project's write-up.
+
+### 12e — `check_term_structure` built as a guard, and false-trip tested with the fix the previous guard's test needed
+
+The guard from 12d's research is now live code (`guards.py`, `check_term_structure`): blocks when VIX3M/VIX9D falls below its own trailing 33rd percentile, computed only from data strictly before the decision date (`data/vix.py`'s `current_contango_and_threshold`, verified by construction against a manual prior-only quantile at an earlier as-of date). Fails closed on stale or missing VIX data, matching `check_data_sanity`'s existing convention. Replaces `check_volatility_regime`'s RV(10d) leg -- the same lagging quantity that broke 12d's first reconstruction attempt -- while keeping its separate yesterday's-move gap-risk leg unchanged.
+
+**The false-trip test this guard needed is the one the guard it replaces never got.** The retired RV-threshold leg passed its own false-trip test at an aggregate 5.7% blocked -- but only 4 of 126 real weeks ever crossed its RV>25% trigger, so that pass was resting on almost no evidence either way. `false_trip.py` now reports `check_term_structure`'s blocked-winner rate **split into VIX9D quartiles with the count in each bucket printed**, specifically so this can't happen again silently:
+
+| regime | n | blocked | blocked % |
+|---|---|---|---|
+| calmest | 31 | 0 | 0.0% |
+| calm | 31 | 0 | 0.0% |
+| active | 30 | 5 | 16.7% |
+| most volatile | 31 | 20 | 64.5% |
+
+(3%/$5, aggregate 20.3% blocked, well under the 30% bar -- but the aggregate number is the least interesting part of this table.) Every bucket has 30-31 weeks, not 4, and the shape is exactly what the guard is supposed to produce: **zero** false trips in the two calmest quartiles, concentrated blocking specifically where the risk actually lives. A guard that blocked evenly across all four buckets would be gating on something other than what it claims to.
+
+The 20% aggregate is a real, accepted cost of the safety mechanism, not a sign of mis-calibration -- it is the same trade-off already quantified in 12d's portfolio comparison (the filter trades ~62% of weeks to buy a 4x smaller drawdown). A guard with a 0% false-trip rate here would mean it never blocks anything, which would just be Guard #8's original failure mode again under a different name.
+
+---
+
+## Volatility research track (Experiments 13+): predicting how far, not which way
+
+**Context:** direction prediction is closed as of Experiment 10 (definitive negative result, IC indistinguishable from zero). Experiment 11 found an options-selling edge that does not survive realistic trading costs. This track asks a different, narrower question: can *volatility* -- how far SPY moves, not which way -- be forecast well enough to tell rich weeks from poor ones, so the strategy trades selectively instead of every week? Full hypothesis ladder and anti-overfitting protocol: `.claude/plans/we-need-a-major-buzzing-catmull.md`. **Numbering starts at 13, not 12** -- Experiment 12 is reserved for a separate, concurrent session's options-track entry (live-measured backtest cost correction, expiry-selection fix, Reviewer stage), coordinated directly between sessions to avoid a collision. This also supersedes the 12-16 ordering originally sketched in `VOLATILITY_ML_PLAN.md`, which predates that coordination.
+
+### Experiment 13, Step 0 — Two data defects in the Experiment 11 backtest output, found before building anything new
+
+**What we did:** before adding any new model, re-examined `output/data/spread_backtest_results.csv` directly for issues that would bias a volatility-timing result before it's even built.
+
+**Defect A -- a truncation artifact inflates the last entry week to a fake win.** `raw_SPY.csv` ends 2026-08-24. The last entry Friday in the backtest (2026-08-21) is supposed to settle 7 days later, but the nearest available trading day on or before that target is only **3 days out**, because the price data simply stops. SPY barely moved in that 3-day window, so all 24 (distance, width) cells for that week are recorded as wins over an artificially short risk window. **Measured impact: immaterial.** Dropping the week moves the flagship 3%/$1 cushion from 3.28 to 3.30 SE at zero slippage, and from -0.40 to -0.36 SE at $0.05 slippage -- real, but not headline-changing. Dropped for hygiene (127 valid weeks -> 126).
+
+**Defect B -- missing option-price data is not missing at random, and it hides the volatile weeks specifically.** Missing rate rises monotonically with distance (0.8% at 1% OTM up to 13.9% at 6% OTM, where contracts are thin and often don't trade). Critically, missing cells cluster in **more volatile** weeks: at 6% OTM, mean absolute weekly SPY move is 1.697% on weeks with missing data vs. 1.450% on weeks with complete data. This matters specifically for any future adaptive-strike strategy (the plan's H4/Experiment 16): a model choosing to sell further OTM in scary weeks would be choosing exactly the weeks where price data is most likely absent. Silently dropping missing cells in that setting would delete the hard trades and make the strategy look better than it is. Mitigation going forward: restrict adaptive selection to distances with <=3.9% missing data, treat a missing cell as "could not trade, fall back to a default," and report results with and without the affected weeks.
+
+**A finding that changes the shape of the problem -- the ranking of widths inverts under cost, and the edge is not evenly distributed across time.** The Experiment 11 addendum only tested $1/$2/$5 width. The full sweep (all four widths the backtest actually replayed) shows $1 width is the best cell at zero slippage (3.30 SE) and the *worst* at $0.05 slippage (-0.36 SE), while **$5 width is the cost-robust choice** (1.55 SE at $0.05, still short of the 2.0 bar but the best available). Checking whether that holds up over time by splitting the 126 weeks into three equal chronological thirds, at $0.05 slippage:
+
+| Period | Date range | $1 | $2 | $5 | $10 |
+|---|---|---|---|---|---|
+| early | 2024-02-09 to 2024-11-29 | -1.23 | -0.25 | 0.10 | -0.16 |
+| mid | 2024-12-06 to 2025-10-03 | -0.52 | 0.07 | 0.19 | -0.04 |
+| late | 2025-10-10 to 2026-08-14 | 1.90 | 3.04 | **3.30** | 2.99 |
+
+$5 width wins in every sub-period, so the "$5 is cost-robust" finding itself is stable, not a full-sample artifact. But **the full-sample 1.55 SE headline is doing something different than it looks**: it is not a moderate, steady edge -- it is close to zero (0.10, 0.19 SE) across the first two-thirds of the real option data, and only clears the 2.0 bar (3.30 SE) in the most recent third. This is exactly the shape of question the volatility-timing hypotheses (H1/H4 in the linked plan) are built to test: is there a real, identifiable condition distinguishing the "late" period from "early"/"mid" (e.g. the VIX term structure -- see the coordination note above, a separate session is independently fetching VIX/VIX9D/VIX3M for a live risk guard, not this historical mechanism test, but the data source is shared and worth checking against for consistency), or is the full-sample average simply being pulled up by one recent, possibly unrepresentative, stretch? Both are live possibilities and the plan's kill criteria are written to distinguish them before either gets reported as a result.
+
+**Script:** `pipeline/vol/step0_recheck.py` (reuses `pipeline.backtest.evidence_gate._cushion_for_cell` rather than reimplementing the cushion math).
+
+### Experiment 13, Test 13a — Does the VIX term structure predict overpricing? (H1, no ML)
+
+**Hypothesis, pre-registered:** the VIX/VIX3M ratio, observable at Friday entry, separates weeks the option market overprices from weeks it doesn't -- selling only in contango (VIX < VIX3M) should survive realistic slippage; selling every week doesn't (Experiment 11's finding). Backed by published research: VIX has closed above VIX3M on only ~8% of days since 2010, and the mechanism cited in the literature is that contango implies overstated volatility while backwardation does not.
+
+**Data:** real observed VIX, VIX3M, and SPY daily closes, 2007-12-04 to 2026-08 (4,694 trading days / 939 non-overlapping Fridays). VIX from a concurrent session's CBOE cache (`output/data/vix.csv`); VIX3M spliced from that same CBOE cache (2009-09-18 onward) plus this session's yfinance mirror for 2007-12-04 to 2009-09-17, the only source with that stretch, cross-checked against the CBOE series on their 4,262 overlapping days first (mean abs diff $0.0005 -- essentially exact agreement, the splice is sound). SPY history fetched separately to `output/data/vol_spy_history.csv` (1993 onward), kept apart from `output/data/raw_SPY.csv` so this never collides with the options bot or the equity-direction track. For each trading day, computed `VIX - forward 21-trading-day realized SPY volatility` (VIX's own native horizon, not the 5-7 day trade horizon, to avoid a silent unit mismatch).
+
+**What we did:** three independent tests of the same hypothesis, from least to most rigorous, on real data only, no simulation.
+
+1. **Binary split, weekly non-overlapping cadence, three sub-periods** (2008-2012, 2013-2019, 2020-2026), comparing mean gap in contango weeks vs. backwardation weeks via Welch's t-test:
+
+| Period | n contango / backward | mean gap contango | mean gap backward | t-stat |
+|---|---|---|---|---|
+| 2008-2012 | 202 / 49 | 4.83 | 0.99 | 1.58 |
+| 2013-2019 | 329 / 25 | 2.84 | 4.39 | **-1.32 (wrong sign)** |
+| 2020-2026 | 314 / 16 | 3.70 | -1.58 | 0.94 |
+
+None reach conventional significance; 2013-2019 reverses direction entirely.
+
+2. **Full-sample check for a cadence/autocorrelation artifact.** All trading days (raw, autocorrelated -- consecutive days share nearly all of the same 21-day forward window): t = 3.20, p = 0.001, looks strong. Weekly, non-overlapping: t = 1.28, p = 0.20, not significant. The strong-looking daily number is inflated by counting the same underlying volatility episode roughly 20 times over.
+
+3. **Investigating the 2013-2019 reversal directly**, rather than dismissing it: of the 25 backwardation Fridays in that period, 20 had a *positive* gap (VIX still overpriced what followed), some substantially. Only 5 were negative, and those 5 cluster tightly around the three real volatility shocks of the period -- 2015-08-21 (day before the China-devaluation flash crash), 2018-02-02 (Friday before Volmageddon), 2018-12-07 (before the Dec 2018 selloff) -- with gaps of -3.8 to -10.2. Backwardation correctly flagged all three major crises of the decade, but was heavily outnumbered by false alarms, and the simple mean cannot separate the two.
+
+**Follow-up test, because a hand-picked "it flagged 3 crises" story is exactly the kind of thing that needs checking against the full distribution, not just eyeballing sorted values:** does the *severity* of backwardation (the ratio's level, and separately its 5-day rate of change) have a monotonic relationship with the gap, via Spearman correlation on the full weekly sample?
+
+| Period | n | rho, ratio level | p | rho, 5d change | p |
+|---|---|---|---|---|---|
+| 2008-2012 | 250 | -0.014 | 0.824 | -0.030 | 0.635 |
+| 2013-2019 | 354 | **0.155** | **0.003** | 0.107 | 0.044 |
+| 2020-2026 | 330 | 0.100 | 0.068 | 0.011 | 0.847 |
+| full-sample | 934 | **0.126** | **<0.001** | 0.034 | 0.294 |
+
+The hypothesis predicts a *negative* correlation (deeper backwardation -> smaller gap). What's measured is **positive and significant in the full sample** -- deeper backwardation is weakly associated with a *larger* gap, the opposite sign. The vivid three-crisis story from the sorted table was a true fact about three specific weeks, but not the dominant pattern across the full distribution; a proper rank correlation, not a hand-picked subset, is what settles this.
+
+**Interpretation:** three independent tests -- binary mean comparison, autocorrelation-corrected full-sample, and continuous severity correlation -- agree the VIX/VIX3M term structure does not reliably predict weekly SPY option overpricing on 19 years of real data. This is treated as a genuine negative result for H1 as specified, the same class of finding as Experiment 10's direction-prediction null: real, checked three ways, not a bug or bad luck. It does not rule out a smarter construction of the same underlying idea (e.g. a wider or different reference tenor, a longer trailing window for the "severity" baseline, or combining term structure with another regime variable), but the specific, literature-motivated version tested here is killed.
+
+**Scripts:** `pipeline/vol/vrp.py` (`build_dataset`, `mechanism_test`, `severity_test`), `pipeline/vol/data_sources.py` (VIX3M splice and its cross-check), `pipeline/vol_extract.py` (yfinance fetch). Full output: `output/data/vol_mechanism_test.csv`, `output/data/vol_severity_test.csv`.
+
+**Coordination note, updated after reading the concurrent session's Experiment 12d:** that entry independently tested a related but distinct question -- not "does the term structure predict the weekly overpricing gap" (this entry's question, answered no), but "does a walk-forward VIX3M/VIX9D percentile filter improve a full portfolio backtest's Sharpe and drawdown" (2016-2026 reconstruction, portfolio basis). Their answer: yes on risk (Sharpe 0.03 -> 0.17, max drawdown 21.24% -> 5.63%), but the entire benefit concentrates in two crisis years (2018, 2020) while the filter *costs* Sharpe in 7 of 10 years -- their own framing, "insurance, not an edge."
+
+**These two results are not in tension, they corroborate each other from different angles.** This entry's own severity investigation found the identical shape directly in the mean-gap data: 20 of 25 backwardation weeks in 2013-2019 were false alarms (gap still positive), while the 5 real ones clustered exactly on 2015, 2018 (x2), and by extension the years the portfolio test independently found the benefit concentrated in. A signal that is statistically unreliable at predicting the typical week's overpricing (what this entry tested and rejected) can still be economically valuable at flagging rare tail events (what Experiment 12d measured and found real) -- those are different claims, and the data supports the second while rejecting the first. **Combined, honest conclusion: the VIX term structure should not be used as a signal to select which weeks are more profitable to trade (H1 as originally specified, killed), but there is real, independently-replicated evidence it is useful as a crisis-avoidance / drawdown-reduction filter (consistent with Experiment 12d's live-measured result).** Flagged back to the concurrent session so both write-ups reflect this reconciliation rather than reading as two disconnected, seemingly-contradictory findings.
+
+---
+
+### Experiment 14 — Does a HAR volatility forecaster beat naive, and does fitting it by QLIKE instead of OLS matter? (H2/H3, first positive result of this track)
+
+**Hypotheses, pre-registered:** (H3) estimating HAR by minimizing QLIKE directly, rather than the classical OLS-on-log-vol specification, materially improves out-of-sample QLIKE, per a 2026 *Journal of Forecasting* result. (H2, deferred to a future entry) downside semivariance should further improve on plain HAR-RV, per Patton & Sheppard (2015).
+
+**Data:** real SPY realized volatility, 2016-07-01 to 2026-08-31 (2,555 trading days), computed from real 1-minute Alpaca bars -- confirmed available on this feed from roughly mid-2016 onward (2015-06-01 returned empty, 2016-06-01 returned 726 real bars; checked directly before building on it). Daily realized variance = sum of squared 1-minute log returns within regular trading hours (13:30-20:00 UTC), the standard Andersen-Bollerslev construction, annualized to match VIX's units. Distribution is sane: mean 10.8%, min 2.3%, max 89.2% (a plausible COVID-era spike), no flat or repeated values.
+
+**What we did:** four forecasters of next-day log realized vol, all walk-forward validated (expanding window, 500-day minimum training, refit every 63 days, so every number below is genuinely out-of-sample, never fit on data it's scored against):
+1. **Naive** -- tomorrow's vol = today's vol.
+2. **EWMA** -- RiskMetrics-style exponential weighting (lambda=0.94).
+3. **HAR-RV (OLS)** -- Corsi's classical specification: daily/weekly/monthly lagged log-vol averages, fit by ordinary least squares.
+4. **HAR-RV (QLIKE)** -- same three features, fit by directly minimizing QLIKE loss via numerical optimization instead of OLS.
+
+Evaluated on the common out-of-sample window (2018-06-27 to 2026-07-07, n=2,016 days) all four models share, using QLIKE (primary, the field-standard loss that penalizes under-forecasting harder than over-forecasting), MSE on log-variance, and Mincer-Zarnowitz R². Every scoring function was first calibrated against known cases before trusting it on real output: QLIKE reads exactly 0 at a perfect forecast and confirmed higher for under- vs over-forecasting by the same ratio; Mincer-Zarnowitz R² reads exactly 1.0 at a perfect forecast; Diebold-Mariano confirmed to correctly detect an obviously-better series (t=-47.7, p~0) and to read ~0 on two identical series.
+
+**Results:**
+
+| Model | n | mean QLIKE | mean MSE(log) | MZ R² |
+|---|---|---|---|---|
+| **HAR-RV (QLIKE)** | 2016 | **0.194** | 0.384 | **0.619** |
+| HAR-RV (OLS) | 2016 | 0.221 | 0.358 | 0.605 |
+| Naive | 2016 | 0.251 | 0.428 | 0.583 |
+| EWMA | 2016 | 0.332 | 0.678 | 0.296 |
+
+Diebold-Mariano (Newey-West HAC): HAR-OLS beats naive, t = -4.62, p < 0.0001. HAR-QLIKE beats HAR-OLS, t = -6.70, p < 0.0001. **90% Model Confidence Set retains only HAR-RV (QLIKE)** -- it is not just nominally best, it is the single model that cannot be statistically ruled out at 90% confidence once all four are compared together (Hansen-Lunde-Nason 2011 style block-bootstrap elimination), which is the right multi-model comparison tool for exactly this "which of several models is best" question rather than a series of uncorrected pairwise tests.
+
+**Why the QLIKE fit wins, checked directly rather than assumed:** OLS-fit HAR is systematically biased low on the variance scale -- its mean forecast variance is only 77% of mean realized variance, and it under-predicts realized variance on 49% of out-of-sample days, essentially a coin flip. This is the textbook consequence of fitting in log-space and exponentiating back (Jensen's inequality: E[exp(X)] > exp(E[X])), not a bug in this implementation. QLIKE-fit HAR corrects most of this bias directly (94% of mean realized variance) and under-predicts on only 37% of days. This matters economically, not just statistically: under-predicting volatility is the dangerous direction for a strategy that sells options against it, since it means underestimating the risk actually being taken on.
+
+**Interpretation:** this is the first positive, literature-confirming result of the volatility research track (H1's term-structure timing signal was killed in the entry above). Both the ranking (naive < HAR-OLS < HAR-QLIKE) and the *reason* HAR-QLIKE wins (correcting a known retransformation bias, verified directly rather than inferred from the metric alone) match the cited research and have a clear economic interpretation, not just a lower number on a chart.
+
+**Scripts:** `pipeline/vol/rv.py` (`fetch_intraday_daily_rv`, real 1-min bar aggregation), `pipeline/vol/har.py` (`HARModel`, both loss specifications), `pipeline/vol/walkforward.py` (`run_walk_forward`), `pipeline/vol/forecast_eval.py` (`qlike`, `mse_log`, `mincer_zarnowitz_r2`, `diebold_mariano`, `model_confidence_set`), `pipeline/vol/experiment14_forecast.py` (the driver). Output: `output/data/vol_spy_intraday_rv.csv`, `output/data/vol_experiment14_results.csv`.
+
+**Known limitation, stated rather than hidden:** the OOS window (2018-2026) is one continuous stretch, the same single-window limitation flagged in Experiment 6d for the equity track and Experiment 13 above for the term-structure test. The walk-forward re-splitting means the model is genuinely never trained on its own test data, but it doesn't fully answer whether HAR-QLIKE's advantage is stable across sub-periods the way Experiment 13's sub-period check was applied to the width finding -- worth doing before this result is used to size anything.
+
+**Next steps:** H2 (downside semivariance / SHAR, using the same real intraday bars this entry already fetched) as a direct extension; H4 (does this forecast convert to money against the real 126-week options backtest) as the economic test this forecasting accuracy result does not, by itself, answer -- per the plan's own standing caveat that "a more accurate volatility forecast does not promise better trading performance."
+
+---
+
+### Experiment 15 — Does Experiment 14's forecast convert to money? (H4, and a real design flaw caught before trusting the result)
+
+**Hypothesis, pre-registered:** comparing the QLIKE-HAR forecast against the market's implied breach probability (`credit / width`, already in the backtest data, no option-pricing model needed) should identify which weekly distance to sell, beating the fixed baseline established in Step 0 (3% distance, $5 width -- the realistic-cost-robust choice, not the $1-width cell that fails under cost). Per the plan's design discipline: this varies WHICH CELL is sold rather than skipping weeks, keeping n near the full 126-week sample rather than collapsing to ~50 weeks and inflating every standard error ~1.58x.
+
+**Two design attempts failed before reaching a trustworthy one -- logged because catching this mattered more than the final number:**
+
+1. **First attempt:** let the signal choose freely among distance AND width, picking whichever cell had the largest raw probability edge (`implied_prob - forecast_prob`). Result looked like a strong, significant loss (paired t = -2.75, p = 0.007) -- but the picks were suspicious: width $1 was chosen 92 of 125 weeks, the exact cell Step 0 already established is the *worst* performer after realistic cost. The metric was comparing probabilities across cells with very different dollar stakes -- a 2-percentage-point edge means far less in dollar terms on a $1-wide spread than a $10-wide one, so raw probability comparison collapses onto whichever width happens to look best in probability space, independent of the forecast's actual information content.
+2. **Second attempt:** multiply the edge by width to convert it to dollar terms. This just inverted the bias -- width $10 was chosen 63 of 125 weeks, because expected value scales linearly with width while risk scales with it too, so an unconstrained dollar-edge maximization degenerates into "always pick the biggest position," not a genuine read of the forecast.
+3. **Final design:** hold width FIXED at the Step 0 baseline ($5) and let the signal choose only among eligible distances (1-4%, restricted per Defect B's missing-data mitigation). At a fixed width, probability edges represent identical dollar stakes, so comparing them across distances is valid -- this also matches the plan's original, narrower design intent (the signal chooses distance, not width).
+
+**Result, final design, real 125-126 weeks (one week's baseline cell itself has missing data, correctly excluded from the paired comparison rather than imputed):**
+
+| Slippage | n | Mean P&L, adaptive | Mean P&L, baseline | Diff | Paired t | p-value |
+|---|---|---|---|---|---|---|
+| $0.00 | 125 | 0.163 | 0.196 | -0.032 | -0.80 | 0.42 |
+| $0.02 | 125 | 0.143 | 0.176 | -0.032 | -0.80 | 0.42 |
+| $0.05 | 125 | 0.113 | 0.146 | -0.032 | -0.80 | 0.42 |
+
+(The diff is identical across slippage levels by construction -- the same flat per-share charge applies to exactly one leg-pair in both the adaptive and baseline series every week, so it cancels in the paired difference. Not a bug.)
+
+Adaptive distance picks skew toward 4% (75 of 126 weeks) -- the forecaster is choosing to sell further out-of-the-money more often than the fixed 3% baseline does.
+
+**Interpretation:** the forecast-based distance selection does not beat the fixed baseline -- the difference is small, slightly negative, and not statistically distinguishable from zero (p=0.42). This is a real negative result for H4 as specified, joining H1 as a killed hypothesis this session, consistent with the plan's own standing caveat, quoted from the literature before this was ever run: "a more accurate volatility forecast does not promise better trading performance." Experiment 14's forecaster is real and validated; using it this way to pick a strike does not, on this sample, produce a better trade.
+
+**Scripts:** `pipeline/vol/overlay.py`. Output: `output/data/vol_experiment15_overlay.csv`.
+
+---
+
+### Experiment 16 — Does downside semivariance (SHAR) beat plain HAR-RV? (H2)
+
+**Hypothesis, pre-registered:** Patton & Sheppard (2015) found future volatility is far more strongly predicted by the volatility of past *negative* returns than positive ones. SHAR replaces HAR's plain daily term with two separate terms -- realized semivariance from up-minutes and down-minutes -- keeping weekly/monthly terms as plain total RV (their own finding was that the sign split matters most at the shortest horizon).
+
+**Data:** the same real 1-minute SPY bars fetched for Experiment 14, extended in one pass (no second fetch) to also compute signed semivariance (RS+, RS-) and bipower variation. Verified before use: on real data, RS+ (88.58) + RS- (86.72) reconstructs total RV (175.30) exactly, and bipower variation (169.17, jump-robust) sits below total RV as required -- both checked first on a synthetic series with a known injected jump (recovered the injected jump size almost exactly) before trusting the real-data numbers.
+
+**What we did:** fit both plain HAR-RV and SHAR by QLIKE (Experiment 14's established winner, so this isolates the effect of the feature split alone, not a re-test of the loss function), same walk-forward discipline, same out-of-sample window (2018-06-27 to 2026-07-07, n=2,016).
+
+| Model | Mean QLIKE | MSE (log) | MZ R² |
+|---|---|---|---|
+| SHAR (QLIKE) | 0.19436 | 0.3824 | 0.6222 |
+| HAR-RV (QLIKE) | 0.19446 | 0.3839 | 0.6192 |
+
+Diebold-Mariano: mean difference -0.0001, t = -0.20, p = 0.84 -- not remotely significant.
+
+**Interpretation:** SHAR is nominally marginally better on every metric, but the difference is statistically indistinguishable from zero. This is a genuine null result for H2 as specified on this data -- the downside-semivariance split does not measurably improve on an already QLIKE-fit HAR-RV for SPY at daily/weekly/monthly horizons. Plausible reasons, not tested further here: Patton-Sheppard's asymmetry effect is typically stronger for individual stocks than for a broad index like SPY (their own paper found smaller index-level effects too), and ~8 years of daily observations may simply be too short a sample to resolve an effect this small. Logged as a real negative result, the same discipline as H1 and H4 above -- not every literature-motivated hypothesis needs to pan out to be worth testing properly.
+
+**Scripts:** `pipeline/vol/rv.py` (`fetch_intraday_full`), `pipeline/vol/har.py` (`build_shar_features`), `pipeline/vol/experiment16_shar.py`. Output: `output/data/vol_spy_intraday_full.csv`, `output/data/vol_experiment16_shar_results.csv`.
+
+---
+
+### Experiment 17 — Does XGBoost beat HAR, with or without exogenous information? (H5, pre-registered hypothesis only half-confirmed)
+
+**Hypothesis, pre-registered:** per "HARd to Beat" (arXiv 2406.08041) and the Financial Innovation review, XGBoost given only HAR's own inputs should NOT beat HAR (HAR wins when the information set is limited); it should only have a chance once given genuinely exogenous information HAR structurally cannot see. Two such features, both already on disk from the equity-direction track and otherwise unused this session: market-wide cross-sectional dispersion (std of daily returns across the 40 tracked stocks -- a known leading indicator of index volatility) and total daily news volume across those same 40 symbols (Experiment 9's `news_count`, which ranked dead last of 18 features for predicting *direction* but whose own research check found news volume predicts volatility better than direction -- right feature, wrong target the first time).
+
+**A real bug caught before trusting the first run:** the 40-stock dispersion feature only exists from 2020-02-13 (the panel data's own start date), 910 of the realized-vol series' 2,555 days earlier. The walk-forward's default 500-day minimum training window put the first several training windows entirely before that date, so after dropping rows with missing features, XGBoost was fit on an **empty** training set -- caught directly from XGBoost's own "Empty dataset at worker" warning and a nonsensical mean QLIKE of 62 (every other model scores ~0.19-0.25). Fixed by raising the minimum training window to 950 days so the first split already contains real exogenous data, not by silently working around the warning.
+
+**Results, corrected, common out-of-sample window 2020-04-13 to 2026-07-20 (n=1,575, shorter than Experiments 14/16's window because exogenous data starts later):**
+
+| Model | Mean QLIKE | MSE (log) | MZ R² |
+|---|---|---|---|
+| HAR-RV (QLIKE) | **0.1908** | 0.3813 | 0.3086 |
+| XGBoost (exogenous features) | 0.2252 | 0.4078 | 0.2287 |
+| XGBoost (HAR components only) | 0.2256 | 0.3671 | 0.2718 |
+
+Diebold-Mariano: XGB(HAR-only) vs HAR-QLIKE, t = 5.93, p < 0.0001, HAR wins -- confirms the predicted null half exactly. XGB(exogenous) vs HAR-QLIKE, t = 4.83, p < 0.0001, **HAR still wins**. XGB(exogenous) vs XGB(HAR-only), t = -0.06, p = 0.95 -- the exogenous features made essentially no difference to XGBoost at all. 90% Model Confidence Set retains only HAR-QLIKE.
+
+**Interpretation, reported honestly against what was predicted:** the null half of H5 is confirmed cleanly -- XGBoost does not beat HAR on HAR's own inputs. But the hypothesis's positive half is **not** confirmed: XGBoost was predicted to have a real chance once given dispersion and news volume, and it didn't -- those features added no measurable value to XGBoost either (t=-0.06 between the two XGBoost variants), and HAR-QLIKE remains the sole survivor of the model confidence set in both configurations. This is a stronger, more definitive result than the pre-registered hypothesis anticipated, not a weaker one: it isn't just that ML needs richer information to compete with HAR here, it's that neither the model class nor these two exogenous features move the needle on this specific target, on real data, checked directly. `panel.py`'s cross-sectional dispersion and `news_count` do not, on this evidence, earn a place in the volatility forecast -- consistent with `news_count`'s own history in this project (Experiment 9: ranked dead last of 18 features for direction; here, ranked no better for volatility either).
+
+**Scripts:** `pipeline/vol/exogenous.py` (`build_market_dispersion`, `build_news_count`, reusing `output/data/engineered_*.csv` and `raw_news.csv` from the equity track), `pipeline/vol/experiment17_ml.py`. Output: `output/data/vol_experiment17_ml_results.csv`.
+
+---
+
 ## Running Synthesis (as of last entry)
 
 The project has now been tested end-to-end across baseline → linear model → nonlinear model → single-symbol feature ablation → multi-symbol generalization check → pooled panel prototype → panel diagnostics, with consistent diagnostic rigor at each step (leakage checks, chronological splitting, overfitting checks, cross-validation, multiple-testing awareness).

@@ -60,12 +60,26 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 ---
 
 ## Tue Sep 1 - go live
-- [ ] Anything unfinished from Monday
+
+### Code hardening, done before market open (see `EXPERIMENT.md` Experiment 12 for full detail)
+- [x] Strike rounding fixed to a $5 increment (`options/config.py:LIQUID_STRIKE_INCREMENT`) -- the live-blocked $746/OI-22 strike from Monday's run is now $745/OI-386 on the same live re-check, strictly more OTM than the raw target, never less
+- [x] `choose_expiry` restricted to Friday only -- found it was silently able to select a Wednesday expiry the backtest never tested (`_fridays_between` is Friday-only); confirmed live, the untested Wednesday's identical strike quoted OI 386 vs the Friday's OI 35,231. Combined with the strike fix, took the live pipeline from BLOCKED to **PASS (all 15 guards)** on real market data, same day
+- [x] Evidence gate's cost model actually fed a real number -- `DEFAULT_SLIPPAGE_PER_SHARE` was always 0.0 in practice despite the formula supporting it. Measured live (not guessed): every liquid candidate strike quoted the $0.01 minimum tick both legs, giving $0.01/spread via the half-spread convention. Selector's tie-break moved from raw `cushion_se` (favored 3%/$1, which costs destroy) to cost-adjusted `mean_net_pnl` (now picks 3%/$5, the width with real depth)
+- [x] Risk-limit ordering fixed -- `CRASH_DAY_BUDGET_PCT` 0.12 exceeded `DRAWDOWN_HARD_PCT` 0.08, meaning the hard stop could never actually bind. Set to 0.06 (room for 2 positions at the 3% cap); verified with a new guards.py self-check that fully-committed budget cannot exceed the hard stop
+- [x] Reviewer stage built (`pipeline/reviewer/reviewer.py`) -- Picker -> Guard -> **Reviewer** -> order, wired into `run_agent.py`. Gemini may APPROVE/SHRINK/VETO a Guard-passed proposal; the "never raise size, never originate a proposal" property is enforced by a pure, network-free function (`apply_reviewer_decision`), not the prompt. 9 offline self-checks including adversarial cases (a simulated 5x-size-up response is clamped to 1.0x; a simulated network failure fails closed to VETO without crashing the run) plus one live end-to-end call (real MCP account fetch + real Gemini call, decision APPROVE)
+- [x] SPY history extended to 2016 for reconstruction work, **without touching `raw_SPY.csv`** or `config.py` (a concurrent session's ML track depends on that file staying untouched) -- `fetch_spy_history.py` writes a separately-named `raw_SPY_long.csv`. Found the SIP feed rejects a single request spanning the full 2016-2026 range ("does not permit querying recent SIP data", reproduced 3x, not transient) but succeeds when the same total range is split into ~2-year chunks; confirmed against an independent earlier fetch (2675 overlapping days, mean abs diff $0.005)
+- [x] VIX/VIX9D/VIX3M cached from CBOE (`pipeline/data/vix.py`) with a fetch-timestamp meta file; a stale or missing cache fails closed rather than silently proceeding (5 self-checks, including an artificially-backdated cache and a genuinely-missing one)
+- [x] Ten-year reconstruction built (`pipeline/backtest/reconstruct.py`) with a **regime-split validation gate that fails the build**, not just a formality -- an earlier informal version of this same reconstruction (trailing RV instead of VIX9D) had aggregate correlation 0.649 but priced calm weeks at 3% of reality and volatile weeks at 125%, producing a false finding that had to be retracted before reaching this file. The corrected VIX9D model passes per-quartile at 0.98-1.03. Found and corrected a real discrepancy against that same earlier informal analysis: the reconstruction must use the SAME $5-increment strike rule the live system trades, which moves 2018's total from -16.40 to **-9.89** and the full-period total from +38.28 to **+24.03** -- both now the authoritative figures
+- [x] `check_term_structure` guard built and wired -- blocks when VIX3M/VIX9D falls below its own trailing 33rd percentile (walk-forward, never a full-sample constant), fails closed on stale data, replaces the RV(10d) leg of the old volatility-regime guard. False-trip tested **split by VIX9D quartile with bucket counts printed** (30-31 weeks per bucket, not the 4 the old guard's aggregate-only test rested on): 0% blocked in the two calmest quartiles, 16.7%/64.5% in active/most-volatile -- the shape a correctly-targeted guard should have, aggregate 20.3% comfortably under the 30% false-trip bar
+- [x] Audit log integrity: two accidental test-contaminated rows (written while verifying the above end-to-end, market genuinely closed at the time) found and removed from `output/audit/decisions.jsonl`, restoring it to only genuine same-day decisions
+
+### Still ahead today
 - [ ] `execution/recovery.py`
-- [ ] **First live order, MANUAL, 1 contract**
+- [ ] **First live order, MANUAL, 1 contract** -- blocked on market open, not on anything above
 - [ ] Fill confirmed, both legs present, audit row written
 - [ ] Net limit price sign convention verified
 - [ ] Switch to AUTO
+- [ ] Deploy to Streamlit Cloud (`CONTROLS_ENABLED=false`)
 
 ## Wed Sep 2 - buffer
 - [ ] Experiment 12 if there is room (naive vs HAR-RV vs XGBoost)
