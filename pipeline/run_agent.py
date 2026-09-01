@@ -19,7 +19,7 @@ import pandas as pd
 
 from pipeline.audit.log import append_entry, read_log
 from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
-from pipeline.execution.orders import submit_open_order
+from pipeline.execution.orders import submit_with_retry
 from pipeline.execution.positions import open_spread_positions
 from pipeline.execution.recovery import reconcile_positions, verify_fill_or_emergency_close
 from pipeline.options.chain import fetch_chain, get_spot
@@ -235,14 +235,42 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     proposal = reviewed  # possibly shrunk (contracts/max_loss_total already recomputed); carries reviewer_* fields onward
 
-    order_result = submit_open_order(get_trading_client(), proposal, dry_run=dry_run)
+    # Rule #9 in full now (orders.submit_with_retry): submit at mid, wait up
+    # to 5 min, and if unfilled cancel + reprice once against a fresh mid
+    # before giving up -- found live on 2026-09-01 that this was never
+    # actually implemented and a stuck order needed manual handling.
+    client = get_trading_client()
+    submission = submit_with_retry(client, proposal, dry_run=dry_run)
+    proposal = submission["proposal"]  # possibly repriced -- the audit log must reflect what was actually submitted, not the stale original quote
+    order_result = submission["order_result"]
 
-    # recovery.py job #2: after every LIVE submission, confirm both legs
-    # actually filled in equal quantity before doing anything else. An
-    # orphaned short put has no floor at all -- the one scenario where
-    # this system's stated max loss stops being true. dry_run short-
-    # circuits to ok/no-halt without touching the broker.
-    fill_check = verify_fill_or_emergency_close(get_trading_client(), proposal, dry_run=dry_run)
+    if submission["status"] == "SKIPPED":
+        append_entry({
+            "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
+            "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
+            "realized_distance": proposal["realized_distance"],
+            "short_symbol": proposal["short_symbol"], "long_symbol": proposal["long_symbol"],
+            "proposed_contracts": proposal["contracts"], "proposed_credit": proposal["credit_per_contract"],
+            "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
+            "guards_failed": [f"ORDER_NOT_FILLED: {submission['reason']}"],
+            "reviewer_decision": proposal["reviewer_decision"], "reviewer_multiplier": proposal["reviewer_multiplier"],
+            "reviewer_reason": proposal["reviewer_reason"],
+            "order_id": None if dry_run else str(order_result.id),
+            "outcome": "SKIPPED",
+        })
+        print(f"Order did not fill: {submission['reason']}. Logged SKIP.")
+        return {"outcome": "SKIPPED", "reason": submission["reason"]}
+
+    # recovery.py job #2: confirm both legs actually filled in equal
+    # quantity before doing anything else. An orphaned short put has no
+    # floor at all -- the one scenario where this system's stated max loss
+    # stops being true. Runs AFTER submit_with_retry's own polling has
+    # already confirmed a real fill, not immediately post-submission when
+    # nothing could possibly have filled yet (the original bug: this check
+    # used to run right after submission and always saw 0/0 open contracts,
+    # reporting a false "both legs filled equally" before any fill occurred).
+    fill_check = verify_fill_or_emergency_close(client, proposal, dry_run=dry_run)
     if fill_check["halt"]:
         print(f"HALT: {fill_check['reason']}")
 
@@ -257,6 +285,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         "proposed_max_loss": proposal["max_loss_total"], "guards_checked": len(guard_result["results"]),
         "guards_failed": [], "reviewer_decision": proposal["reviewer_decision"],
         "reviewer_multiplier": proposal["reviewer_multiplier"], "reviewer_reason": proposal["reviewer_reason"],
+        "order_id": None if dry_run else str(order_result.id),
         "outcome": "DRY_RUN" if dry_run else "SOLD",
     })
     print(f"{'[DRY RUN] ' if dry_run else ''}Proposal accepted and logged: {proposal['short_symbol']}/{proposal['long_symbol']}, "
