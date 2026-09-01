@@ -28,7 +28,7 @@ SCHEMA_FIELDS = [
     "timestamp", "mode",
     "current_equity", "peak_equity",
     "spy_price", "vol_forecast",
-    "gate_distance", "gate_cushion_se",
+    "gate_distance", "gate_cushion_se", "realized_distance",
     "short_symbol", "long_symbol", "net_delta_share_equiv",
     "proposed_contracts", "proposed_credit", "proposed_max_loss",
     "guards_checked", "guards_failed", "budget_remaining",

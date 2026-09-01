@@ -23,18 +23,32 @@ from pipeline.risk import options_config as risk_cfg
 
 def choose_distance_width(gate_df: pd.DataFrame) -> dict | None:
     """Rule #3/#5: among cells clearing the 2-SE bar, pick the one with the
-    highest cushion (not the highest P&L). Multiple cells can clear the bar
-    at once (Experiment 11: three did, at 3% distance), and Part 9B is
-    explicit that picking whichever looks best in hindsight would repeat the
-    exact mistake the evidence gate exists to prevent. Cushion is the
-    statistic the gate itself is built on, so it is the only tie-break
-    decided in advance rather than after seeing which one paid the most.
+    highest cost-adjusted mean P&L (T2 correction; was cushion_se).
+
+    The original reasoning for tie-breaking on cushion_se was sound in
+    spirit -- decide the rule in advance rather than pick whichever cell
+    looks best after seeing the results -- but cushion_se turned out to be
+    anti-correlated with cost robustness: it is highest exactly where
+    credit is thinnest (3%/$1's cushion of 3.28 SE was the best in the
+    table, but its mean P&L falls from $0.052/share to -$0.048/share at a
+    pre-committed 2c/leg slippage assumption, and its short strike was
+    blocked live on real open interest of 22 against the 500 minimum).
+    mean_net_pnl already has the same "decided in advance" property --
+    evidence_gate.py bakes in DEFAULT_SLIPPAGE_PER_SHARE before this
+    function ever sees the table, so this is not picking whichever paid
+    the most in hindsight, it is picking the cell whose cushion survives
+    a cost assumption fixed before the comparison.
     """
     survivors = tradable_distances(gate_df)
     if survivors.empty:
         return None
-    best = survivors.loc[survivors["cushion_se"].idxmax()]
-    return {"distance": float(best["distance"]), "width": float(best["width"]), "cushion_se": float(best["cushion_se"])}
+    best = survivors.loc[survivors["mean_net_pnl"].idxmax()]
+    return {
+        "distance": float(best["distance"]),
+        "width": float(best["width"]),
+        "cushion_se": float(best["cushion_se"]),
+        "mean_net_pnl": float(best["mean_net_pnl"]),
+    }
 
 
 def _nearest_listed_strike_at_or_beyond(strikes: pd.Series, target: float) -> float | None:
@@ -63,9 +77,18 @@ def _nearest_listed_strike_at_or_above(strikes: pd.Series, target: float) -> flo
 
 
 def choose_strikes(chain_df: pd.DataFrame, spot: float, distance: float, width: float) -> dict | None:
+    """Rule #4. The short leg's target is rounded down to the nearest
+    LIQUID_STRIKE_INCREMENT before searching the listed chain -- SPY open
+    interest concentrates on $5/$10 strikes, and a raw $1-odd target
+    (e.g. $746 at 3% below a $769 spot) can pass the round-trip build but
+    fail live on real depth (confirmed: OI 22 against the 500 minimum on
+    exactly that strike). Rounding down moves the target FURTHER from spot,
+    so this can only buy more distance than the evidence gate measured,
+    never less."""
     listed = chain_df["strike"].unique()
     listed = pd.Series(listed)
     target_short = spot * (1 - distance)
+    target_short = math.floor(target_short / opt_cfg.LIQUID_STRIKE_INCREMENT) * opt_cfg.LIQUID_STRIKE_INCREMENT
     short_strike = _nearest_listed_strike_at_or_beyond(listed, target_short)
     if short_strike is None:
         return None
@@ -73,20 +96,31 @@ def choose_strikes(chain_df: pd.DataFrame, spot: float, distance: float, width: 
     long_strike = _nearest_listed_strike_at_or_above(listed, target_long)
     if long_strike is None or long_strike >= short_strike:
         return None
-    return {"short_strike": short_strike, "long_strike": long_strike}
+    realized_distance = (spot - short_strike) / spot
+    return {"short_strike": short_strike, "long_strike": long_strike, "realized_distance": realized_distance}
 
 
 def choose_expiry(today: date, chain_df: pd.DataFrame) -> date | None:
     """Rule #6: from the expiries that actually exist in the fetched chain
     (not just the theoretical Mon/Wed/Fri calendar), prefer the one closest
     to 7 DTE -- the shortest end of the window, matching the entry/expiry
-    cadence the backtest actually tested."""
-    # Defense-in-depth: exclude anything not strictly in the future. The
-    # chain fetch is already scoped to expiries_in_window's forward-looking
-    # dates, so this has no current trigger, but choose_expiry shouldn't
-    # rely on that upstream scoping alone to keep it from ever proposing a
-    # stale/expired date.
-    listed_expiries = sorted(e for e in chain_df["expiry"].unique() if (e - today).days >= 0)
+    cadence the backtest actually tested.
+
+    "Matching the cadence" means FRIDAY only -- spread_backtest.py's
+    _fridays_between generates exclusively Friday entry/expiry dates, so
+    every win rate, cushion, and credit statistic in the evidence gate was
+    measured on Friday-to-Friday cycles alone. An earlier version of this
+    function picked the nearest-DTE listed expiry with no weekday filter,
+    which can silently select a Wednesday expiry the backtest never tested
+    -- confirmed live (2026-09-01): the untested Wed 2026-09-09 expiry's 3%
+    strike quoted OI=386 (blocks the 500 minimum) while the SAME strike on
+    the tested Fri 2026-09-11 expiry quoted OI=35,231 (two orders of
+    magnitude more, comfortably passes). Restricting to Friday isn't just
+    a liquidity fix, it is what "trade what was measured" requires here."""
+    listed_expiries = sorted(
+        e for e in chain_df["expiry"].unique()
+        if (e - today).days >= 0 and e.weekday() == 4  # Friday only -- matches _fridays_between
+    )
     if not listed_expiries:
         return None
     return min(listed_expiries, key=lambda e: (e - today).days)
@@ -182,6 +216,7 @@ def select_spread(
         "expiry": expiry,
         "dte": dte,
         "distance": choice["distance"],
+        "realized_distance": strikes["realized_distance"],  # after Rule #4's $5-increment rounding; may exceed "distance"
         "width_dollars": width_dollars,
         "credit_per_contract": credit_per_contract,
         "limit_price_per_share": credit_per_share,  # Rule #8: LIMIT at mid.
@@ -246,5 +281,12 @@ if __name__ == "__main__":
         print(f"\nGuards: {'PASS' if result['passed'] else 'BLOCKED'}")
         for f in result["failed"]:
             print(f"  FAILED: {f['guard']}: {f['reason']}")
+
+        # Regression lock: choose_expiry must never propose a non-Friday
+        # expiry -- the backtest's _fridays_between tested Friday cycles
+        # exclusively, and a Wednesday expiry blocked live on real OI 386
+        # vs the identical Friday strike's 35,231 (2026-09-01).
+        assert proposal["expiry"].weekday() == 4, f"expiry {proposal['expiry']} is not a Friday"
+        print(f"Expiry-weekday regression check: {proposal['expiry']} is a Friday -- PASS")
     else:
         print("\nNo trade selected today (empty gate, no listed strikes, or budget too small).")
