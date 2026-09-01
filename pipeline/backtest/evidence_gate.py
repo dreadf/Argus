@@ -14,6 +14,8 @@ import math
 
 import pandas as pd
 
+from pipeline.risk import options_config as risk_cfg
+
 SE_THRESHOLD = 2.0
 
 # A cell needs at least this many non-overlapping weeks to be gate-eligible
@@ -25,16 +27,27 @@ SE_THRESHOLD = 2.0
 MIN_N_FOR_GATE = 30
 
 
-def _cushion_for_cell(cell: pd.DataFrame) -> dict:
+def _cushion_for_cell(cell: pd.DataFrame, slippage_per_share: float) -> dict:
     n = len(cell)
     if n == 0:
         return None
     win_rate = cell["win"].mean()
     avg_credit = cell["credit"].mean()
-    # net_credit (credit minus any per-share slippage haircut, see
-    # spread_backtest.py's slippage_per_share) may not exist on older CSVs;
-    # fall back to gross credit, matching the pre-cost-model behavior.
-    avg_net_credit = cell["net_credit"].mean() if "net_credit" in cell else avg_credit
+    # T2 fix: recompute net_credit/net_pnl fresh from the raw credit/
+    # payout_owed columns using THIS call's slippage assumption, rather
+    # than trusting a net_credit column baked into the CSV at whatever
+    # slippage the backtest happened to be run with last (previously 0.0,
+    # which is how the gate ended up cost-blind despite the machinery for
+    # a cost model already existing). Falls back to gross credit only if
+    # payout_owed is genuinely absent (older CSV format).
+    if "payout_owed" in cell:
+        net_credit = cell["credit"] - slippage_per_share
+        net_pnl = net_credit - cell["payout_owed"]
+        avg_net_credit = net_credit.mean()
+        mean_net_pnl = net_pnl.mean()
+    else:
+        avg_net_credit = avg_credit
+        mean_net_pnl = cell["net_pnl"].mean() if "net_pnl" in cell else None
     width = cell["width"].iloc[0]
     # Breakeven win rate assuming every loss is a max loss (conservative --
     # Part 2B notes the real backtest P&L, used below via mean_net_pnl, is
@@ -65,16 +78,17 @@ def _cushion_for_cell(cell: pd.DataFrame) -> dict:
         "se": se,
         "cushion_pp": cushion_pp,
         "cushion_se": cushion_se,
+        "mean_net_pnl": mean_net_pnl,  # cost-adjusted; T2's tie-break metric, see selector.choose_distance_width
         "eligible": eligible,
         "passes_gate": eligible and cushion_se >= SE_THRESHOLD,
     }
 
 
-def compute_gate(results_df: pd.DataFrame) -> pd.DataFrame:
+def compute_gate(results_df: pd.DataFrame, slippage_per_share: float = risk_cfg.DEFAULT_SLIPPAGE_PER_SHARE) -> pd.DataFrame:
     valid = results_df[~results_df["missing_data"]]
     rows = []
     for (distance, width), cell in valid.groupby(["distance", "width"]):
-        row = _cushion_for_cell(cell)
+        row = _cushion_for_cell(cell, slippage_per_share)
         if row is not None:
             rows.append(row)
     return pd.DataFrame(rows).sort_values(["distance", "width"]).reset_index(drop=True)
@@ -92,6 +106,8 @@ if __name__ == "__main__":
 
     results = coerce_win_column(pd.read_csv("output/data/spread_backtest_results.csv"))
 
+    print(f"Slippage assumption: ${risk_cfg.DEFAULT_SLIPPAGE_PER_SHARE:.2f}/share "
+          f"(2c/leg, both legs -- T2, pre-committed in risk/options_config.py, not tuned to this data)\n")
     gate = compute_gate(results)
     pd.set_option("display.width", 160)
     print(gate.to_string(index=False))

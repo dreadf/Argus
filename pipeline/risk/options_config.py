@@ -6,8 +6,15 @@ never a fixed starting-balance number.
 """
 
 PER_TRADE_CAP_PCT = 0.03           # Guard #4: max loss on one spread
-CRASH_DAY_BUDGET_PCT = 0.12        # Guard #5: max combined loss, all open positions
-MAX_CONCURRENT_POSITIONS = 4       # Guard #6
+# Guard #5: max combined loss, all open positions. Was 0.12, which EXCEEDS
+# DRAWDOWN_HARD_PCT (0.08) below -- a single bad day across concurrent
+# same-distance SPY spreads (one correlated bet, not several diversified
+# ones) could realize more loss than the amount meant to trigger the halt,
+# making Guard #14 unreachable in the exact scenario it exists for. Set
+# below the hard stop so the halt can actually bind; leaves room for 2
+# positions at the 3% per-trade cap rather than the nominal 4.
+CRASH_DAY_BUDGET_PCT = 0.06
+MAX_CONCURRENT_POSITIONS = 4       # Guard #6 -- left at 4; CRASH_DAY_BUDGET_PCT is what binds
 
 NET_DELTA_CAP_SHARE_EQUIV = 150    # Guard #7, ~$115k notional at $769 spot
 
@@ -59,3 +66,31 @@ PROFIT_TARGET_PCT = 0.50           # monitor.py exit #1: close at this fraction 
 # number here.
 
 FALSE_TRIP_MAX_BLOCKED_WINNERS_PCT = 0.30  # false-trip test bar for any guard/exit rule
+
+# T2 fix: the evidence gate's tie-break (selector.choose_distance_width) used
+# to pick the highest cushion_se with no cost model, which is highest
+# exactly where credit is thinnest -- 3%/$1's mean P&L falls from $0.052 to
+# -$0.048 at a 4c/spread haircut, so the gate was recommending the cell
+# trading costs destroy.
+#
+# The number below is MEASURED, not assumed. A first attempt used an
+# invented 2c/leg (4c/spread), reasoned loosely from an old docstring
+# claiming "$0.01-$0.05 wide" quotes -- plugged into the gate's existing
+# (already cost-aware, but previously always fed 0.0) required_win_rate
+# formula, that guess emptied the evidence gate entirely: zero cells clear
+# 2 SE at 4c/spread. Rather than pick a smaller number because it keeps a
+# trade alive (exactly the guard-fitting pattern Guard #8's 0.08->0.04->0.0
+# history is a documented warning against), this was replaced with a live
+# measurement: fetched the real chain (2026-09-01, spot $766.87, 8 DTE) and
+# read the actual bid/ask on both legs of every (distance, width) cell the
+# gate considers. Every liquid candidate (OI in the hundreds to tens of
+# thousands) quoted at the $0.01 minimum tick, both legs, at every distance
+# from 2% to 4%. Using the standard half-spread-per-leg convention (Rule
+# #8 limits at mid, so the expected cost of a marketable limit is roughly
+# half the quoted spread per leg): 0.005 + 0.005 = $0.01/spread.
+#
+# Known limitation: this is one snapshot on one calm day. Spreads widen in
+# stress, which is exactly when the VIX term-structure guard (Wednesday's
+# work) is designed to skip trading anyway, so the two are not independent,
+# but this number should not be treated as a stress-period estimate.
+DEFAULT_SLIPPAGE_PER_SHARE = 0.01
