@@ -76,10 +76,12 @@ Rules for this file, from `OPTIONS_SYSTEM_PLAN.md` Part 0C:
 - [x] `execution/recovery.py` built -- the module the plan calls "the one that must be correct even if everything else is rough." Three jobs, all wired in: (1) `reconcile_positions()` treats the broker's real positions as truth, blocks opening a new position if it holds an option leg the audit log doesn't recognize; wired into `run_agent.py` before every new open. (2) `verify_fill_or_emergency_close()` confirms both legs filled equally right after a LIVE submission (not waiting up to 15 min for the next monitor cycle) -- a mismatch triggers an immediate market close of the excess and halts for the day. (3) heartbeat wired into `monitor.py`'s 15-minute loop on every cycle including no-ops, fixing a real gap between that module's docstring and its actual code. 8 self-checks
 
 ### Still ahead today
-- [ ] **First live order, MANUAL, 1 contract** -- blocked on market open, not on anything above
-- [ ] Fill confirmed, both legs present, audit row written
-- [ ] Net limit price sign convention verified
-- [ ] Switch to AUTO
+- [x] **T-LIVE: first live order, AUTO, 6 contracts** -- SPY 735/730 put credit spread, 3%/$5, run via `run_agent.py --live`. Found and fixed a real bug first: `_already_decided_today()` treated any SKIPPED row as "today is decided," including a pre-market "check_market_open" bounce logged hours earlier -- without the fix, the system would have refused to ever evaluate today even after the market opened. Added `_is_real_decision()` to distinguish pre-flight bounces (market closed, transient fetch failures) from real evaluations, with 4 self-checks
+- [x] First submission (net -0.27) sat unfilled 28 minutes as the market moved the mid down to -0.22 -- cancelled, refreshed the mid, resubmitted at -0.22
+- [x] Fill confirmed: **filled at -0.23**, both legs present (`SHORT -6 SPY735P @ 0.93`, `LONG +6 SPY730P @ 0.70`), account cash increased by $137.70 (~0.23 x 100 x 6)
+- [x] **Net limit price sign convention CONFIRMED**: negative = net credit -- cash going up on a negative fill price is only consistent with that reading. Updated `orders.py`'s docstring and all four UNVERIFIED markers to record the confirmation (order id `ae5cf304-5837-418f-b5c6-54e5d1fab767`)
+- [ ] Switch to AUTO -- mode is already logged as AUTO for this fill; still need to confirm the monitor cron picks this position up correctly for exit management
+- [ ] Discovered gap, not yet fixed: `orders.py`'s own docstring describes a "wait 5 min -> improve $0.01 -> cancel and skip" retry rule that was never actually implemented in `run_agent.py` -- today's stuck order had to be handled manually. Worth building before relying on this unattended.
 - [ ] Deploy to Streamlit Cloud (`CONTROLS_ENABLED=false`)
 
 ## Wed Sep 2 - buffer

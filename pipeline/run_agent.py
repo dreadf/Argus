@@ -34,9 +34,36 @@ from pipeline.risk.guards import run_all_guards
 GATE_PATH = "output/data/evidence_gate_results.csv"
 
 
+# Reasons logged before any real evaluation happens -- market closed, a
+# transient fetch failure, a missing evidence-gate file. These mean "never
+# got to look," not "looked and declined," so they must NOT block a retry
+# later the same day once the underlying condition clears. Found live: an
+# early run today logged "check_market_open" before the open, and without
+# this exclusion _already_decided_today() would refuse to re-evaluate for
+# the rest of the day even after the market opened -- the system could go
+# an entire trading day without ever actually looking at a trade, if its
+# first invocation happened to land before open (which a fixed-time cron
+# firing near market open easily could, on any day the open is delayed).
+_PRE_FLIGHT_SKIP_PREFIXES = ("check_market_open", "get_clock failed", "check_evidence_gate", "data/account fetch failed")
+
+
+def _is_real_decision(row) -> bool:
+    outcome = row.get("outcome")
+    if outcome in ("SOLD", "DRY_RUN"):
+        return True
+    if outcome == "SKIPPED":
+        reasons = row.get("guards_failed")
+        if not isinstance(reasons, list) or not reasons:
+            return True  # no reason recorded -- can't tell it was pre-flight, treat conservatively as decided
+        return not all(any(str(r).startswith(p) for p in _PRE_FLIGHT_SKIP_PREFIXES) for r in reasons)
+    return False
+
+
 def _already_decided_today() -> bool:
     """Rule: at most one new position per session. A crash-and-restart must
-    reconcile to 'already handled today', not open a second position.
+    reconcile to 'already handled today', not open a second position --
+    but only once the day has produced a REAL decision (see _is_real_decision),
+    not merely a pre-flight bounce.
 
     Compares against the UTC date, not the local machine's date -- audit log
     timestamps are written in UTC (log.py), and this process may run from
@@ -53,13 +80,7 @@ def _already_decided_today() -> bool:
     log_dates = pd.to_datetime(log_df["timestamp"], utc=True).dt.date
     today_utc = datetime.now(timezone.utc).date()
     todays_rows = log_df[log_dates == today_utc]
-    # NB: DRY_RUN must be included here -- an earlier version only checked
-    # SOLD/SKIPPED, which meant every accepted-but-not-yet-live proposal
-    # (the entire dry-run build/test period) was NOT recognized as already
-    # decided, so a second same-day run would re-evaluate and log a second
-    # accepted proposal. Confirmed by running twice in sequence before this
-    # fix: two DRY_RUN rows were written for one session instead of one.
-    return any(o in ("SOLD", "SKIPPED", "DRY_RUN") for o in todays_rows.get("outcome", []))
+    return any(_is_real_decision(row) for _, row in todays_rows.iterrows())
 
 
 def _load_peak_equity() -> float | None:
@@ -245,6 +266,36 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
 
 if __name__ == "__main__":
+    # Self-check for the pre-flight-vs-real-decision split: a day with only
+    # pre-flight bounces (market closed, a transient fetch failure) is NOT
+    # decided; a day with a real evaluation (a guard actually ran and
+    # blocked, a Reviewer veto, a fill) IS decided. Runs before the CLI
+    # proceeds, same convention as every other module's self-checks in
+    # this project.
+    only_preflight = pd.DataFrame([
+        {"outcome": "SKIPPED", "guards_failed": ["check_market_open"]},
+        {"outcome": "SKIPPED", "guards_failed": ["data/account fetch failed: simulated"]},
+    ])
+    assert not any(_is_real_decision(r) for _, r in only_preflight.iterrows()), \
+        "pre-flight-only skips must not count as a real decision"
+    print("Pre-flight-only skips: correctly NOT a real decision")
+
+    real_guard_block = pd.DataFrame([{"outcome": "SKIPPED", "guards_failed": ["check_credit_width_ratio: below floor"]}])
+    assert any(_is_real_decision(r) for _, r in real_guard_block.iterrows()), \
+        "a real guard block must count as a decision"
+    print("Real guard-block skip: correctly IS a real decision")
+
+    sold_row = pd.DataFrame([{"outcome": "SOLD", "guards_failed": []}])
+    assert any(_is_real_decision(r) for _, r in sold_row.iterrows())
+    print("SOLD row: correctly IS a real decision")
+
+    no_reason_row = pd.DataFrame([{"outcome": "SKIPPED", "guards_failed": None}])
+    assert any(_is_real_decision(r) for _, r in no_reason_row.iterrows()), \
+        "a SKIPPED row with no reason recorded must be treated conservatively as decided"
+    print("SKIPPED with no reason recorded: correctly treated as decided (fails closed)")
+
+    print("\nAll run_agent.py self-checks passed.\n")
+
     parser = argparse.ArgumentParser()
     # A mutually exclusive group so passing both flags raises an explicit
     # argparse error instead of silently picking whichever was typed last

@@ -145,9 +145,18 @@ def build_emergency_single_leg_close(symbol: str, contracts: int, held_side: str
 
 
 def _raw_qty(raw_positions: list, symbol: str, side) -> int:
+    """Real bug, found live on the first actual fill (2026-09-01): Alpaca
+    reports a SHORT position's qty as a NEGATIVE number (e.g. -6 for 6
+    short contracts), by broker convention -- `side` already disambiguates
+    short vs long, so `int(float(p.qty))` without abs() made a perfectly
+    matched 6-short/6-long spread compare as short_qty=-6 != long_qty=6 in
+    evaluate_position, which would have triggered emergency_close_orphan on
+    a healthy position on the very next monitor cycle. Caught only because
+    the cron runs --dry-run; would have submitted a real erroneous close
+    under --live."""
     for p in raw_positions:
         if p.symbol == symbol and p.side == side:
-            return int(float(p.qty))
+            return abs(int(float(p.qty)))
     return 0
 
 
@@ -256,6 +265,8 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
 
 if __name__ == "__main__":
+    from alpaca.trading.enums import PositionSide
+
     today = date(2026, 9, 1)
 
     base_position = {
@@ -311,6 +322,25 @@ if __name__ == "__main__":
     emergency = build_emergency_single_leg_close(base_position["short_symbol"], 6, "short")
     assert emergency.side == OrderSide.BUY and emergency.position_intent == PositionIntent.BUY_TO_CLOSE
     print("build_emergency_single_leg_close: correct single-leg BUY_TO_CLOSE for an orphaned short")
+
+    # Regression lock for the real bug found on today's first live fill:
+    # Alpaca reports a SHORT position's qty as negative (broker convention).
+    # A healthy, fully-matched 6-short/6-long spread must NOT compare as
+    # mismatched just because the short leg's raw qty is -6.
+    class _FakePosition:
+        def __init__(self, symbol, side, qty):
+            self.symbol, self.side, self.qty = symbol, side, str(qty)
+
+    healthy_raw = [
+        _FakePosition(base_position["short_symbol"], PositionSide.SHORT, -6),
+        _FakePosition(base_position["long_symbol"], PositionSide.LONG, 6),
+    ]
+    s_qty = _raw_qty(healthy_raw, base_position["short_symbol"], PositionSide.SHORT)
+    l_qty = _raw_qty(healthy_raw, base_position["long_symbol"], PositionSide.LONG)
+    assert s_qty == 6 and l_qty == 6, f"broker's negative short qty (-6) must normalize to 6, got short={s_qty} long={l_qty}"
+    healthy_result = evaluate_position({**base_position, "short_qty": s_qty, "long_qty": l_qty}, today, current_short_mid=0.25, current_long_mid=0.05)
+    assert healthy_result["action"] == "hold", f"a healthy matched spread with broker-negative short qty must not be flagged orphaned: {healthy_result}"
+    print(f"Broker-negative short qty (-6) normalized correctly, healthy spread correctly held: {healthy_result}")
 
     print("\nAll monitor.py self-checks passed.")
 

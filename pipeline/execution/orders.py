@@ -8,14 +8,14 @@ Rule #9: wait 5 min -> improve $0.01 once -> cancel and skip. That polling
 loop lives in run_agent.py (the daily entry point), not here -- this module
 only builds and submits a single order attempt.
 
-The net-price sign convention for a credit spread inside an MLEG order is
-NOT verified against real fills yet -- Alpaca's docs don't state it plainly,
-and the plan is explicit that this must be confirmed on the first live
-1-contract order (Verification #7), not assumed. `net_limit_price` below is
-the best-documented-guess convention (negative = net credit, matching a
-"debit-style" limit price where receiving money is a negative cost); dry-run
-output prints this prominently so a human checks it before Tuesday's smoke
-test flips dry_run off.
+CONFIRMED sign convention (2026-09-01, first live fill, order
+ae5cf304-5837-418f-b5c6-54e5d1fab767): negative net_limit_price = net
+credit. A 6-contract SPY 735/730 put credit spread submitted at
+net_limit_price=-0.22 filled at -0.23, and account cash increased by
+$137.70 (~0.23 * 100 * 6, minus a cent of rounding) -- cash going UP on a
+negative fill price is only consistent with negative meaning credit, not
+debit. Alpaca's docs never stated this plainly, hence Verification #7's
+requirement to confirm on a real fill rather than assume it.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ def build_open_order(proposal: dict) -> tuple[LimitOrderRequest, float]:
         OptionLegRequest(symbol=proposal["short_symbol"], ratio_qty=1, side=OrderSide.SELL, position_intent=PositionIntent.SELL_TO_OPEN),
         OptionLegRequest(symbol=proposal["long_symbol"], ratio_qty=1, side=OrderSide.BUY, position_intent=PositionIntent.BUY_TO_OPEN),
     ]
-    # UNVERIFIED sign convention -- see module docstring. Best documented
-    # guess: negative limit_price for a net credit.
+    # Confirmed sign convention (see module docstring): negative
+    # limit_price for a net credit, verified against a real fill.
     net_limit_price = -round(proposal["limit_price_per_share"], 2)
 
     order = LimitOrderRequest(
@@ -64,8 +64,7 @@ def submit_open_order(client: TradingClient, proposal: dict, dry_run: bool = Tru
     summary = (
         f"SELL {proposal['contracts']}x {proposal['short_symbol']} / "
         f"BUY {proposal['contracts']}x {proposal['long_symbol']}, "
-        f"net limit price {net_limit_price:+.2f} (UNVERIFIED sign convention -- "
-        f"confirm on the first live 1-contract fill), "
+        f"net limit price {net_limit_price:+.2f} (sign convention confirmed live 2026-09-01), "
         f"expected credit ${proposal['credit_per_contract']:.2f}/contract, "
         f"max loss ${proposal['max_loss_total']:.0f} total"
     )
@@ -97,7 +96,7 @@ if __name__ == "__main__":
     assert short_leg.side == OrderSide.SELL and short_leg.position_intent == PositionIntent.SELL_TO_OPEN
     assert long_leg.side == OrderSide.BUY and long_leg.position_intent == PositionIntent.BUY_TO_OPEN
     assert net_price == -0.07
-    print(f"Order built: MLEG, 2 legs, net limit price {net_price} (unverified sign, see module docstring)")
+    print(f"Order built: MLEG, 2 legs, net limit price {net_price} (sign convention confirmed live, see module docstring)")
 
     from pipeline.execution.broker import get_trading_client
 
