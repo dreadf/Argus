@@ -1,0 +1,9 @@
+{
+  "forecast_vol_annualized_pct": 7.49,
+  "breach_prob": 0.0197,
+  "breach_distance_pct": 3.0,
+  "data_through": "2026-08-31",
+  "n_train": 2533,
+  "generated_at": "2026-09-01 19:47 UTC",
+  "note": "Informational only. Not used by the Picker, Guard, or Reviewer. Eight independent tests (strike timing, position sizing, a skip filter) failed to convert this forecast into a validated trading edge."
+}

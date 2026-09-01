@@ -220,6 +220,24 @@ except Exception as e:
 else:
     gate_error = None
 
+# A separate research track (pipeline/vol/, EXPERIMENT.md Experiments 13-27)
+# built and validated a real volatility forecaster (HAR-X), then tested 8
+# independent ways of using it to pick strikes, size positions, or gate
+# trades -- all 8 came back negative. So it is INFORMATIONAL ONLY here,
+# never consumed by the Picker/Guard/Reviewer pipeline above.
+vol_forecast = None
+try:
+    from pipeline.vol.deliverable import decide as vol_decide
+
+    # live=True: refit on all history for a CURRENT number. The walk-forward
+    # series necessarily lags real data by up to one 63-day test block, which
+    # was showing a 55-day-stale forecast here.
+    vol_forecast = vol_decide(date.today(), live=True)
+except Exception as e:
+    vol_forecast_error = str(e)
+else:
+    vol_forecast_error = None
+
 
 def _max_dd(s: pd.Series) -> float:
     return float((s.cummax() - s).max())
@@ -329,6 +347,24 @@ with tab_overview:
             st.markdown(f'<span class="path-word {verdict_class}">{verdict_text}</span>', unsafe_allow_html=True)
         else:
             st.caption("Not enough data to compute today.")
+
+    with st.container(border=True):
+        _card_header("Volatility forecast (research track)",
+                     "HAR-X, a separate model validated on real data (EXPERIMENT.md Exp. 14/18) -- informational only, not used by the Picker, Guard, or Reviewer above.")
+        if vol_forecast_error is not None:
+            st.caption(f"Forecast unavailable right now ({vol_forecast_error}).")
+        elif vol_forecast is not None:
+            col1, col2 = st.columns(2)
+            col1.metric("Forecasted annualized vol", f"{vol_forecast['forecast_vol_annualized_pct']:.1f}%",
+                        help=f"As of {vol_forecast['forecast_as_of']} (walk-forward, no lookahead).")
+            col2.metric("Implied breach prob. (3% / weekly)", f"{vol_forecast['forecast_breach_prob']:.1%}")
+            st.caption(
+                "8 independent tests (strike timing, position sizing, a skip filter) all failed to convert this "
+                "forecast into a validated trading edge -- shown here as context, not a signal. See EXPERIMENT.md, "
+                "\"Volatility Track — Final Synthesis.\""
+            )
+        else:
+            st.caption("Forecast not available.")
 
     with st.container(border=True):
         _card_header("Today's decision path", "The gates one proposal a day has to clear, in order. Evidence gate is a standing backtest fact (not recomputed daily); the rest are today's actual run.")

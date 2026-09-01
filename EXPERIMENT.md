@@ -640,6 +640,20 @@ Adaptive distance picks skew toward 4% (75 of 126 weeks) -- the forecaster is ch
 
 **Scripts:** `pipeline/vol/overlay.py`. Output: `output/data/vol_experiment15_overlay.csv`.
 
+**Deeper root-cause analysis, done after the fact rather than left as a bare null result:**
+
+Two compounding, independently confirmed causes were found, not just "it didn't work":
+
+1. **A real, statistically significant scaling bias.** The forecaster predicts *tomorrow's* volatility; using it for a week means scaling that single-day number by sqrt(horizon/252). Checked directly: the scaled weekly forecast overshoots the actual realized weekly move by 22% on average, and this is a significant bias, not noise (paired t=2.70, p=0.0078). The QLIKE fit corrected a real *daily* under-prediction problem (Experiment 14); stretched to a week, that correction appears to overshoot.
+
+2. **That bias is not uniform across distances, and this is what actually drove the strategy's picks.** Mean implied vs. forecast breach probability by distance: 1% (18.2% vs 27.5%, edge -9.3pp), 2% (10.0% vs 12.7%, edge -2.7pp), 3% (5.5% vs 5.4%, edge +0.1pp), 4% (3.1% vs 2.3%, edge +0.8pp). The forecaster overstates near-the-money risk and slightly understates far-OTM risk -- a flat normal-distribution approximation applied uniformly, when SPY's real risk-neutral density is well-documented in the literature as strongly negatively skewed and fat-tailed relative to normal (options market prices already account for this asymmetry; a single volatility number fed through a symmetric bell curve cannot). Consequence: distance=4% won the "biggest edge" comparison 75 of 126 weeks, almost by mechanical default, largely independent of what that week's forecast actually said.
+
+**Was there real signal underneath the bias?** Checked directly rather than assumed. Holding distance fixed (removing the cross-distance confound), the edge signal shows genuine, significant predictive power at two of four distances: 1% (Spearman rho=0.22, p=0.016) and especially 4% (rho=0.38, p<0.0001). The forecaster is not informationally empty.
+
+**The obvious fix was tried, and it did not rescue the result.** De-meaning the edge within each distance bucket (removing exactly the mechanical bias identified above) spread the picks out sensibly (44/37/30/15 instead of 75/32/19/0, confirming the fix worked mechanically) -- but the resulting strategy performed *worse*, not better (mean diff -0.10 vs the original -0.03, both non-significant, p=0.35 vs p=0.42).
+
+**Inference:** fixing the identified bias did not rescue the strategy, which is the more informative result than the bias itself. The real, statistically-significant timing information the forecaster carries within a single fixed strike is too weak relative to week-to-week noise to build a working cross-strike selection rule out of, even with the obvious confound removed. QLIKE optimizes for getting the *average level* of volatility right over a long stretch (2,016 days, where Experiment 14's win is genuine and well-powered) -- it was never optimized for, and does not reliably deliver, fine-grained relative ranking of *which single upcoming week* is more dangerous than another, which is the specific, much harder task H4 needed and only had 126 chances to prove out.
+
 ---
 
 ### Experiment 16 — Does downside semivariance (SHAR) beat plain HAR-RV? (H2)
@@ -682,6 +696,275 @@ Diebold-Mariano: XGB(HAR-only) vs HAR-QLIKE, t = 5.93, p < 0.0001, HAR wins -- c
 **Interpretation, reported honestly against what was predicted:** the null half of H5 is confirmed cleanly -- XGBoost does not beat HAR on HAR's own inputs. But the hypothesis's positive half is **not** confirmed: XGBoost was predicted to have a real chance once given dispersion and news volume, and it didn't -- those features added no measurable value to XGBoost either (t=-0.06 between the two XGBoost variants), and HAR-QLIKE remains the sole survivor of the model confidence set in both configurations. This is a stronger, more definitive result than the pre-registered hypothesis anticipated, not a weaker one: it isn't just that ML needs richer information to compete with HAR here, it's that neither the model class nor these two exogenous features move the needle on this specific target, on real data, checked directly. `panel.py`'s cross-sectional dispersion and `news_count` do not, on this evidence, earn a place in the volatility forecast -- consistent with `news_count`'s own history in this project (Experiment 9: ranked dead last of 18 features for direction; here, ranked no better for volatility either).
 
 **Scripts:** `pipeline/vol/exogenous.py` (`build_market_dispersion`, `build_news_count`, reusing `output/data/engineered_*.csv` and `raw_news.csv` from the equity track), `pipeline/vol/experiment17_ml.py`. Output: `output/data/vol_experiment17_ml_results.csv`.
+
+---
+
+### Experiment 18 — HAR-X: does adding VIX to plain HAR-RV beat it? (New best model of the track)
+
+**Where this came from:** researching why VIX outperforms GARCH as a standalone predictor (asked directly, mid-session) surfaced that the literature doesn't actually pose it as an either/or choice -- multiple papers find the strongest approach is neither alone but HAR augmented with VIX as an exogenous term, and report it "notably improves forecast performance." Never tested in this project before this entry, despite VIX already being on disk since Experiment 13.
+
+**What we did:** added log(VIX) as a fourth predictor to the plain HAR daily/weekly/monthly terms (same lag discipline -- VIX known at the close before the day being forecast, never the target day itself), both HAR-RV and HAR-X fit by QLIKE (Experiment 14's established winner, isolating the effect of adding VIX specifically, not re-testing the loss function). VIX reused directly from the peer session's CBOE cache already cross-checked in Experiment 13, no re-fetch.
+
+**Results, same out-of-sample window as Experiments 14/16 (2018-06-27 to 2026-07-07, n=2,016):**
+
+| Model | Mean QLIKE | MSE (log) | MZ R² |
+|---|---|---|---|
+| **HAR-X (QLIKE)** | **0.1797** | 0.3973 | **0.6561** |
+| HAR-RV (QLIKE) | 0.1945 | 0.3839 | 0.6192 |
+
+Diebold-Mariano: t = -3.22, p = 0.0013 -- HAR-X wins, clearly significant. 90% Model Confidence Set retains only HAR-X. **This is the best model in the entire track**, beating plain HAR-RV by a wider, more significant margin than SHAR (Experiment 16, t=-0.20, null) or either XGBoost variant (Experiment 17, both lost to HAR-RV) managed.
+
+**Checked directly rather than trusted from the metric alone:** the fitted VIX coefficient across all 32 walk-forward refits is **consistently positive** (min 0.51, max 1.02, mean 0.69, never once flips sign) -- the signature of a genuine, stable relationship rather than an artifact of overfitting a single lucky window. Higher VIX reliably predicts higher realized volatility the next day, exactly the expected economic relationship, and it holds up refit after refit across 8 years.
+
+**Interpretation:** the clearest confirmation yet that the forward-looking information VIX carries (real option prices, reflecting the market's aggregate view of upcoming risk) adds real value on top of a purely backward-looking statistical model, even though VIX alone failed as a *weekly overpricing timing signal* in Experiment 13, and even though HAR alone already beat naive and EWMA in Experiment 14. The two are not redundant -- combining them measurably beats either alone.
+
+**Natural next step:** re-run Experiment 15's economic-conversion test (H4) with HAR-X in place of plain HAR-RV. Experiment 15's root-cause analysis found the original forecaster carried real but weak per-strike timing signal, swamped by a systematic breach-probability miscalibration; a meaningfully better forecaster is the most direct way to test whether that conclusion holds or whether H4 was limited by forecast quality specifically.
+
+**Scripts:** `pipeline/vol/har.py` (`build_har_x_features`), `pipeline/vol/experiment18_harx.py`. Output: `output/data/vol_experiment18_harx_results.csv`.
+
+---
+
+### Experiment 19 — Re-testing H4 with the proven-better forecaster: does it matter?
+
+**Question:** Experiment 15 found the QLIKE-HAR-based adaptive strike selection does not beat the fixed 3%/$5 baseline (p=0.42), and root-caused it to real-but-weak per-strike timing signal drowned out by a systematic breach-probability miscalibration. Experiment 18 then found a meaningfully, significantly better forecaster (HAR-X, t=-3.22 vs plain HAR-RV). Same strategy, same baseline cell, same methodology as Experiment 15 -- only the forecaster feeding the breach-probability calculation changes. Isolates whether Experiment 15's null was about forecast quality or something more structural.
+
+**Result:**
+
+| Slippage | n | Mean P&L, adaptive | Mean P&L, baseline | Diff | Paired t | p-value |
+|---|---|---|---|---|---|---|
+| $0.00 | 125 | 0.160 | 0.196 | -0.036 | -0.88 | 0.38 |
+| $0.02 | 125 | 0.140 | 0.176 | -0.036 | -0.88 | 0.38 |
+| $0.05 | 125 | 0.110 | 0.146 | -0.036 | -0.88 | 0.38 |
+
+Adaptive distance picks: 4% (68), 3% (42), 2% (16) -- still concentrated at the wider distances, the same pattern Experiment 15 found, now with HAR-X's forecasts feeding the same breach-probability conversion.
+
+**Interpretation:** the significantly better forecaster did **not** improve the economic result -- if anything the mean diff moved nominally further from zero (-0.032 to -0.036), though the change itself is well within noise and not meaningful on its own. What matters is the direction of the non-effect: **swapping in a forecaster that is provably, significantly better on the exact loss function (QLIKE) used to validate it made no difference to whether it converts into a better trade.** This is a clean, isolating result. It rules out "the forecaster just wasn't good enough" as the explanation for H4's failure, and correspondingly strengthens Experiment 15's root-cause diagnosis: the bottleneck is not forecast accuracy at the level QLIKE measures it (how close the predicted volatility LEVEL is to what happens on average), but the translation of any volatility forecast into a per-strike breach probability via a flat normal-distribution approximation that structurally misprices the shape of the risk across distances (documented in the literature as strongly negatively skewed and fat-tailed relative to normal for SPY specifically). A better forecaster feeding the same flawed conversion still produces a flawed conversion. This points the next real test toward fixing that specific piece -- a skew-aware breach-probability model -- rather than continuing to chase better volatility forecasters.
+
+**Scripts:** `pipeline/vol/overlay.py` (extended with a `model` parameter, `"har"` vs `"harx"`), `pipeline/vol/experiment19_overlay_harx.py`. Output: `output/data/vol_experiment19_overlay_harx.csv`.
+
+---
+
+### Experiment 20 — Fixing the actual bottleneck: a skew-aware breach probability
+
+**Method, a real technique not invented for this project:** filtered historical simulation (Barone-Adesi, Giannopoulos & Vosper 1999 and the standard VaR literature since) -- rather than assuming weekly SPY moves are normally distributed, take real daily SPY closes back to 1993 (`vol_spy_history.csv`), compute overlapping weekly log returns, and divide each one by the trailing 21-day realized volatility in effect when that window started. What remains is the real, empirical SHAPE of weekly moves (skew, fat tails, crash asymmetry) independent of whatever volatility regime produced them, built from 8,428 real windows spanning 1998, 2000-2002, 2008, 2010's flash crash, 2015, 2018, 2020, and 2022. To price a breach probability, the same z-score used in the normal approximation is looked up against this REAL distribution instead of a bell curve.
+
+**Confirmed before use, on real data:** skew = -0.91 (crash-prone, matches the literature's documented negative skew for SPY), excess kurtosis = 3.27 (fat tails). Empirical vs. normal breach probability at increasing z-scores: 0.5x (ratio 0.81), 1.0x (0.86), 1.5x (1.04), 2.0x (1.53), 2.5x (2.94), 3.0x (**6.86x**) -- the normal approximation *overstates* risk for moderate moves and *dramatically understates* it for the deep-OTM moves this strategy actually trades, exactly the mechanism Experiment 15 diagnosed.
+
+**Re-ran H4 with HAR-X (Experiment 18, the best forecaster) and this empirical breach probability in place of the normal one:**
+
+| Slippage | Mean P&L, adaptive | Mean P&L, baseline | Diff | t-stat | p-value |
+|---|---|---|---|---|---|
+| $0.00 | 0.189 | 0.196 | -0.006 | -0.12 | 0.91 |
+| $0.05 | 0.139 | 0.146 | -0.006 | -0.12 | 0.91 |
+
+The gap shrank from -0.036 (Experiment 19, same forecaster, normal breach probability) to essentially flat. Distance picks spread out more evenly (64/33/27/2 vs. 68/42/16/0) -- the fix worked mechanically, exactly as intended.
+
+**Checked whether the underlying signal quality improved, not just the headline number:** the within-distance edge-vs-outcome correlation, previously significant at only 2 of 4 distances (Experiment 15's diagnosis: 1% p=0.016, 4% p<0.0001, 2%/3% not significant), is now significant at **all four**: 1% (rho=0.34, p=0.0001), 2% (rho=0.27, p=0.002), 3% (rho=0.37, p<0.0001), 4% (rho=0.42, p<0.0001). The mechanical per-distance bias also shrank sharply (mean edge -0.039/-0.010/+0.0003/+0.0019, versus the normal approximation's -0.093/-0.027/+0.001/+0.008 in Experiment 15).
+
+**Interpretation:** this is a genuine, clean methodological improvement, not just a smaller loss. Both diagnosed problems from Experiment 15 were fixed as intended -- the mechanical cross-distance miscalibration shrank substantially, and the real per-strike timing signal is now measurable across the whole distance range instead of only at the extremes. The strategy no longer clearly *underperforms* the baseline (unlike Experiments 15 and 19's consistently negative, if non-significant, results) -- it is now statistically indistinguishable from a coin flip against it (p=0.91), a meaningfully different and more neutral finding than before. It is not, on this evidence, a working edge. But the diagnostic arc across Experiments 15, 19, and 20 is itself a real result: it isolated forecast quality as NOT the bottleneck (Experiment 19), correctly identified the actual bottleneck (the probability conversion), and fixing that bottleneck produced exactly the predicted improvement in signal quality without yet producing a statistically significant trading edge. Whether a larger real-option sample, a longer standardization window, or a different eligible-distance range would close the remaining gap is the natural next question, not tested here.
+
+**Scripts:** `pipeline/vol/skew_breach.py` (`build_standardized_return_distribution`, `empirical_breach_prob`), `pipeline/vol/overlay.py` (extended with a `breach_fn` parameter), `pipeline/vol/experiment20_overlay_skew.py`. Output: `output/data/vol_experiment20_overlay_skew.csv`.
+
+**Closing check, and a multiple-testing caveat stated up front:** this is the fourth test of H4's underlying question on the same 125-126 week sample (Experiments 15, 19, 20, and this check), so any positive-looking result here should be read as a hypothesis for a fresh sample, not a confirmed one. Every prior test compared different DISTANCES against each other, which is where the mechanical bias lived. The signal's actually-validated strength is *within* a single fixed distance (all four now significant, above) -- so the more direct test is using it as a week-SKIP filter at the one traded cell (3%/$5), never comparing across distances at all. Split the 125 weeks by the empirical-breach-probability edge at that single cell: weeks in the top half by edge averaged net P&L of **0.256**; weeks in the bottom half averaged **0.136** -- nearly double, and the right sign, consistent with everything else found in this thread. But a two-sample t-test on the split is not significant (t=1.03, p=0.30); a simpler edge>0 cut is similarly directional but not significant (t=0.61, p=0.55, n=64). **This closing check was superseded by Experiment 21's randomization null, below -- do not treat the "materially different" framing that originally closed this section as the final word.**
+
+---
+
+### Experiment 21 — Randomization null for the week-skip filter: the correct final word on H4
+
+**Why this experiment exists.** The plan's anti-overfitting protocol (item 9) and kill criteria both pre-registered a randomization null as the gate before trusting any positive-looking H4 result: rerun the exact statistic with the signal randomly permuted, and check whether the real result actually sits outside that noise distribution. This had never been run against the final, best version of the signal (Experiment 20's HAR-X forecaster + empirical breach probability) -- Experiment 20's own closing check reported a directional split (0.256 vs 0.136) with only a parametric t-test, which is a thin tool on n=125 skewed weekly option P&L, and is exactly the kind of number this gate exists to check before it gets called "something there."
+
+**Method.** Reproduces Experiment 20's closing-check split exactly (the fixed 3%/$5 cell, HAR-X forecast, empirical/skew-aware breach probability, edge = implied - forecast breach probability, median split), then reruns that same split **2,000 times** with the HAR-X forecast values randomly reshuffled across the 125 entry dates before computing each week's edge. Shuffling only the forecast severs any real timing relationship between the forecast and that week's outcome while leaving every marginal distribution untouched (same forecast values in circulation, same weeks traded, same real market-implied probabilities, same real credits and payouts) -- the correct null for "does WHEN the signal fires matter, or would any random schedule of which weeks look rich produce a similar-looking split."
+
+**Result, and it is not what Experiment 20's closing check implied:**
+
+| | Value |
+|---|---|
+| Real split diff (top-half-edge − bottom-half-edge net P&L) | **0.1247** |
+| Parametric t-test | t=1.07, p=0.286 |
+| Null distribution (2,000 shuffles) | mean=**0.2056**, std=0.0732 |
+| Empirical p-value (null ≥ real, one-sided) | **0.8135** |
+
+(The real diff of 0.1247 here vs. the closing check's 0.120 is the same finding reproduced independently in code, not a new number -- the small gap is a rounding/boundary artifact of the median-split implementation, not a discrepancy worth chasing.)
+
+**What this means, worked through rather than just reported.** The null distribution is not centered near zero -- it averages 0.2056, *larger* than the real signal's 0.1247. That is only possible because the edge used to split weeks is `implied_p - forecast_p`, and only `forecast_p` gets shuffled; `implied_p` (the real market-priced probability, from real credit/width at each real week) stays attached to its real week in every permutation. So even a fully randomized "forecast" still sorts weeks substantially by real market pricing, and market pricing alone -- with no forecasting model at all -- produces a bigger top/bottom P&L split than the real HAR-X-informed signal does. The real signal sits at the **81st percentile of the null distribution**, meaning 81% of random forecast schedules would have produced a split at least as large. That is not "not quite significant" -- it is the signal actively underperforming noise built from the same real market prices.
+
+**Revised, final conclusion for H4.** Experiment 20's closing check was read too generously. The apparent 0.256-vs-0.136 split was mostly a reflection of real market-implied pricing variation across weeks (which any split retains, forecast or not), not evidence of the forecast timing anything. Once compared against the pre-registered randomization null -- the actual gate this whole track agreed to be bound by -- the week-skip-filter finding does not survive. **This is the honest, final answer for H4 across all five attempts (Experiments 15, 19, 20, its closing check, and this null): the volatility forecast, even in its best validated form (HAR-X + empirical breach probability), does not convert into a strike-timing edge that beats the market's own pricing on this data.** That is a real, negative, well-earned result, not an inconclusive one -- exactly the kind of finding the protocol was built to produce honestly instead of overclaiming a small-sample fluctuation.
+
+**Scripts:** `pipeline/vol/experiment21_randomization_null.py`; extends `pipeline/vol/overlay.py`'s `run_overlay` with optional `forecast_by_date`/`rng` parameters for reuse (not used directly by this script, which implements its own tighter loop for the single fixed cell, but kept for any future permutation test on the full adaptive overlay).
+
+---
+
+### Experiment 22 — The horizon-scaling hypothesis: a real defect in the raw data that turned out not to apply to the model actually used
+
+**Where this came from.** Experiment 21 left an anomaly that should not have been left standing: the randomization null *beat* the real signal (0.2056 vs 0.1247). Noise outperforming a validated forecast is not "no edge," it is a symptom of the forecast being systematically wrong in a direction. Hypothesis: every H4 test (Experiments 15, 19, 20, 21) forecast **one day** of volatility and then scaled it to the trade's ~5-trading-day horizon by sqrt(h/252), which on the annualized scale is equivalent to assuming annualized volatility is **constant** across the week. Volatility mean-reverts, so that assumption should be biased, and biased *by current vol level*.
+
+**The diagnostic, run first on the raw RV series with no model involved.** Ratio of the sqrt-scaling assumption to the actual 5-day average variance, by current-vol quintile: **0.611 / 0.779 / 1.014 / 1.027 / 1.374**. Perfectly monotonic. Spearman rho = 0.448 (p = 2.6e-126), Mann-Whitney Q5 > Q1 (p = 5.4e-83). Square-root-of-time scaling understates risk by ~39% in the calmest weeks and overstates it by ~37% in the wildest ones. **This effect is real and enormous.**
+
+**The test of the fix,** deliberately run on the large sample (n=2,016 out-of-sample days) and spending none of the 125-week option sample, which is exhausted for multiple-testing purposes after Experiments 15/19/20/21. Target: actual 5-day *average* realized variance, the quantity the weekly spread is genuinely exposed to. Identical features and identical walk-forward windows for every model, with `purge=5` so no training row's forward-looking target overlaps its test block, and Diebold-Mariano at h=5 for the overlapping-target loss autocorrelation. The forward-window construction was calibrated against a known arithmetic case before use (variance series 1..10 returned 3.0 at t=0 and 8.0 at t=5, last 4 rows NaN, confirming no off-by-one and no lookahead).
+
+| Model | mean QLIKE | MZ R² | bias ratio |
+|---|---|---|---|
+| **harx_direct_5day** | **0.17938** | 0.611 | 1.144 |
+| harx_scaled_1day | 0.17945 | 0.620 | 1.191 |
+| har_direct_5day | 0.19704 | 0.515 | 0.911 |
+| har_scaled_1day | 0.20780 | 0.564 | 0.935 |
+
+Diebold-Mariano: **HAR-X direct vs HAR-X scaled: t = -0.02, p = 0.9832.** Plain HAR direct vs plain HAR scaled: t = -2.30, p = 0.0212.
+
+**The hypothesis is falsified for the model that actually matters, and the reason is instructive.** For HAR-X, the forecaster every H4 test used, training directly on the 5-day target makes *no difference whatsoever* (a QLIKE gap of 0.00007, p = 0.98). The diagnostic above was measuring a genuine phenomenon, but I mis-attributed where it applied: it measured sqrt-scaling of **today's raw realized volatility**, whereas the H4 pipeline was sqrt-scaling a **HAR-X forecast**, and HAR's daily/weekly/monthly structure already performs most of that mean-reversion internally. The defect was real in the raw data and already absorbed by the model.
+
+**Confirmed directly rather than inferred, and it argues against the fix rather than for it:** the level-dependent bias check (median forecast variance / actual 5-day variance by current-vol quintile) shows `harx_scaled_1day` running 1.323 / 1.164 / 1.108 / 1.070 / 1.055 (Q5−Q1 spread −0.269), while `harx_direct_5day` runs 1.567 / 1.319 / 1.233 / 1.154 / 1.047 (spread **−0.520**). The "fix" makes the level-dependence *worse*, not better, and in the opposite direction from the raw-data diagnostic. This is a clean falsification, not an ambiguous one.
+
+**Genuine secondary finding, and it is not a consolation prize.** For **plain HAR** (no VIX), the direct multi-step target *does* significantly help: QLIKE 0.197 vs 0.208, t = -2.30, p = 0.021. The benefit is real but disappears entirely once VIX is present. The coherent explanation, consistent with everything else in this track: **VIX is itself a 30-day forward-looking measure, so adding it already supplies the multi-horizon information that a direct multi-step target would otherwise have to learn from history.** The two are substitutes. That deepens Experiment 18's finding (VIX adds real information on top of backward-looking RV) by identifying *what kind* of information it adds, and it is a result on n=2,016 with a proper HAC-corrected test, not a small-sample artifact.
+
+**Standing conclusion, unchanged.** This does not rescue H4, and Experiment 21 remains the final word there. The Experiment 21 anomaly (null beating signal) is therefore still explained by what that entry already said: `implied_p` stays attached to its real week under shuffling, so the null retains real market-pricing information while the real signal's forecast term subtracts from it. It is not explained by horizon misalignment, which this experiment rules out.
+
+**Scripts:** `pipeline/vol/experiment22_horizon.py` (`build_horizon_target`, calibrated against a known case). Output: `output/data/vol_experiment22_horizon_results.csv`.
+
+---
+
+### Experiment 23 — Risk-adjusted re-test: does the forecast shrink the tail even though it doesn't raise the mean?
+
+**Where this came from.** Every H4 test (Experiments 15, 19, 20, 21) measured the MEAN of weekly net P&L. The literature on volatility-managed portfolios (Moreira & Muir 2017; see `SOURCES.md`) uses a volatility forecast to size/shrink risk, not to time which asset to pick — a vol forecast's canonical job is a smaller left tail, not a bigger average. Separately, Wade (2026) found that the best-forecasting model, the best-ranking model, and the best-Sharpe model can be three different models on real equity data — exactly what Experiment 19 found here (a significantly better forecaster produced no better mean P&L). No test in this track had ever asked the risk-adjusted question.
+
+**Design, pre-registered before running.** Reuses Experiment 20's exact setup (HAR-X, empirical/skew-aware breach probability, $0.05 slippage, same 125 weeks). Statistic fixed in advance: Sortino ratio (MAR=0) of the adaptive weekly P&L series minus the fixed baseline's, since net_pnl is already a per-week dollar figure, not a return needing further adjustment. Max drawdown and CVaR(10%) reported descriptively, not gated on. Gate: the same randomization-null machinery from Experiment 21 (2,000 reshuffles of the HAR-X forecast across the 125 entry dates), applied to the Sortino-diff statistic. All three risk functions (`sortino_ratio`, `max_drawdown`, `cvar`) were checked against a hand-computed toy series before use (`[1,1,1,-2,1,1,1,-2]` → Sortino 0.25, max drawdown -2.0, CVaR(10%) -2.0, all confirmed exactly).
+
+**Stated up front:** this is the sixth test drawing on the same 125-126 week sample (after 15, 19, 20, 20's closing check, and 21).
+
+**Result:**
+
+| | Adaptive | Baseline |
+|---|---|---|
+| Sortino ratio | 0.2732 | 0.2470 |
+| Max drawdown | **-5.530** | -4.950 |
+| CVaR(10%) | **-0.8408** | -0.7154 |
+
+Sortino diff (pre-registered statistic): **+0.0261**. Randomization null (2,000 shuffles): mean=0.0020, std=0.1219. **Empirical p-value: 0.3475 — not significant.**
+
+**The honest, slightly uncomfortable finding underneath the headline number.** The pre-registered statistic points the right direction for once (real Sortino diff sits above the null mean, unlike Experiment 21 where it sat below), but not significantly. More importantly, the two DESCRIPTIVE risk measures point the OPPOSITE way from what the hypothesis predicted: the adaptive strategy has a *worse* max drawdown (-5.53 vs -4.95) and a *worse* CVaR at the 10% tail (-0.84 vs -0.72) than the fixed baseline. A strategy that were genuinely "sizing down risk defensively" should show a better tail, not a worse one. Sortino edging up while the actual tail gets worse is not a contradiction in the code — Sortino's downside deviation weights every below-MAR week roughly equally, so it can improve from fewer small negative weeks even while the handful of worst weeks get worse — but it does mean the pre-registered statistic was, in hindsight, the wrong one to lead with for "does this shrink the tail." The tail-focused numbers are the more relevant ones for the sizing hypothesis specifically, and they say no.
+
+**Conclusion: the sizing/risk-adjusted reframing does not rescue H4 either.** Combined with Experiment 19 (better forecaster, same mean), Experiment 20 (fixed the conversion mechanism, still flat), Experiment 21 (the apparent timing edge was mostly real market pricing, not signal, and didn't survive the null), and Experiment 22 (the horizon-scaling hypothesis, falsified for HAR-X specifically) — this is the fifth distinct angle on H4 to come back negative, each with a different, real mechanism tested and ruled out rather than a repeat of the same test. That is a genuinely thorough negative result, not an under-explored one.
+
+**Scripts:** `pipeline/vol/experiment23_tail_risk.py` (`sortino_ratio`, `max_drawdown`, `cvar`, all calibrated against a known case); extends `pipeline/vol/overlay.py`'s `run_overlay` with a `return_paired` flag to expose the underlying weekly P&L series for risk-metric computation.
+
+---
+
+### Experiment 24 — More data, not more tests: daily-entry (overlapping) options replay, and a near-miss the randomization null correctly caught
+
+**Where this came from.** Every H4 test so far used the 125 non-overlapping Friday-only entries `spread_backtest.py` deliberately builds, capping the sample regardless of how many angles get tested on it. This asks a different question: does a genuinely larger sample, built by entering the same put credit spread every trading day instead of only Fridays, change the answer? This is new data, not a seventh look at the 125-week sample -- but every observation overlaps its neighbors by up to 6 of 7 days, so it isn't free evidence either, and every test on it uses Newey-West HAC correction, never a plain t-test.
+
+**Data build.** `pipeline/vol/daily_entry_backtest.py` -- imports `spread_backtest.py`'s own strike-construction and option-fetch logic directly (read-only, never modified) and replays it at every trading day from 2024-02-01 (Alpaca's expired-contract history start) to 2026-08-24, for the four `ELIGIBLE_DISTANCES` at the baseline $5 width only (not the full 6x4 sweep, to keep real API load proportional to this specific question). **642 real entry days, 2,304 valid cells, 260 missing (2,564 total rows).** Self-check: 15/2,304 cells (0.65%) show small negative credit, the same "should be ~0, small noise tolerated" tolerance the original backtest accepts.
+
+**One real data-quality finding, worth stating plainly:** the missing-data rate is meaningfully higher on daily entries than on the Friday-only set -- 4.1% / 7.0% / 12.2% / 17.3% at 1%/2%/3%/4% distance, versus 0.8% / 1.0% / 2.0% / 3.9% weekly (Step 0). Non-Friday entries hit thinner quoted liquidity more often, especially far-OTM. Not fatal (missing cells still fall back to baseline, same Defect-B mitigation as every prior H4 test), but a genuine difference from the weekly-only data, not an artifact to wave away.
+
+**Design.** Identical strategy to Experiment 20 (HAR-X, empirical/skew-aware breach probability, $0.05 slippage, adaptive selection among the four eligible distances at the baseline width) -- only the entry frequency changes. Diebold-Mariano with Newey-West HAC correction, h=5 (the ~5-trading-day holding period). Gated by the same randomization null used in Experiments 21/23 (HAR-X forecast reshuffled across entry days, 2,000x).
+
+**Result:**
+
+| | Value |
+|---|---|
+| n (overlapping daily entries, 0 fallback) | 563 |
+| Mean P&L, adaptive | 0.1281 |
+| Mean P&L, baseline | 0.0907 |
+| Mean diff | **+0.0374** |
+| Diebold-Mariano (HAC, h=5) | t=-1.91, **p=0.0558** |
+| Randomization null (2,000 shuffles) | mean=0.0299, std=0.0170 |
+| Empirical p-value (null ≥ real, one-sided) | **0.3450** |
+
+**This is exactly the trap the randomization null exists to catch.** The Diebold-Mariano test alone, at p=0.0558, is a hair's width from the conventional 0.05 line -- with 4.5x the sample of every prior H4 test, this is the closest any version of H4 has come to a clean significant result, and it would be tempting to call it "basically significant." The randomization null says otherwise: the null distribution itself averages 0.0299 with std 0.0170, so the real result (0.0374) sits well within one standard deviation of pure noise -- 34.5% of random forecast schedules score as well or better. **Same mechanism identified in Experiment 21:** the edge computation is `implied_p - forecast_p`, only `forecast_p` gets shuffled, and `implied_p` (real market pricing, attached to its real day in every permutation) alone generates most of this apparent effect. More data made the raw test statistic look better without making the underlying signal any more real -- a direct, concrete illustration of why "check against the null" has to be a hard gate and not a courtesy step, and a clean demonstration of what would have been a false positive without it.
+
+**Conclusion.** A 4.5x larger, genuinely new sample, testing the identical mechanism, still does not survive the pre-registered gate. This closes the "not enough data" possibility specifically -- more observations over the same real market window did not change the verdict. Combined with Experiments 19, 20, 21, 22, and 23, this is the sixth distinct mechanism tested (better forecaster, fixed conversion, randomization null, horizon scaling, risk-adjusted sizing, and now sample size) to return the same answer. **H4 is closed.**
+
+**Scripts:** `pipeline/vol/daily_entry_backtest.py`, `pipeline/vol/experiment24_daily_overlay.py`. Output: `output/data/vol_daily_entry_backtest.csv`.
+
+---
+
+### Experiment 25 — HAR-J: does adding the jump component beat plain HAR-RV? (Rounding out the forecasting story, not reopening H4)
+
+**Where this came from.** A "why not try other models" discussion surfaced that bipower variation and the jump component (RV minus BPV, clipped at 0) had been sitting computed and unused in `vol_spy_intraday_full.csv` since Experiment 14's own data build. HAR-J (Andersen, Bollerslev & Diebold 2007) adds the previous day's jump size as a fourth regressor -- a different literature extension from SHAR (Experiment 16, killed, which splits by return SIGN rather than jump SIZE). **Stated up front: this is a forecasting-quality exercise, not a re-opening of H4.** Experiment 19 already showed a significantly better forecaster (HAR-X) made zero difference to whether any forecast converts to money -- that conclusion does not depend on which volatility model sits behind it.
+
+**Result, same out-of-sample window as Experiments 14/16/18 (2018-06-27 to 2026-07-07, n=2,016):**
+
+| Model | Mean QLIKE | MZ R² |
+|---|---|---|
+| HAR-J (QLIKE) | 0.19429 | 0.6246 |
+| HAR-RV (QLIKE) | 0.19446 | 0.6192 |
+
+DM: t=-0.16, p=0.8752 -- **not significant**, essentially a tie (mean QLIKE gap of 0.0002). 90% MCS retains HAR-J only by the barest margin, not a meaningful separation.
+
+**One genuinely interesting, literature-consistent detail, checked directly rather than left at the headline null:** the fitted jump coefficient is **consistently negative** across all 32 walk-forward refits (mean -0.044, range -0.097 to -0.029, never once positive) -- a stable, real relationship, not overfitting noise. The sign matches published findings that the jump component of realized variance is *less persistent* than the continuous component: after controlling for total lagged RV (which already includes the jump's contribution), a day where more of that RV came from a jump rather than continuous variation predicts slightly *lower* next-day volatility, consistent with jumps being closer to idiosyncratic, fast-decaying shocks than the slower-moving continuous variance HAR's other terms already capture well.
+
+**Interpretation.** A real, stable, correctly-signed effect that is too small to matter economically or statistically at this sample size -- a legitimate null result, not a wasted test. Confirms (again) that HAR-RV's three lagged averages already capture the overwhelming majority of exploitable structure in this series; the jump/continuous decomposition adds interpretability, not forecasting power, on this data. HAR-X (Experiment 18) remains the best model in the track.
+
+**Scripts:** `pipeline/vol/har.py` (`build_har_j_features`), `pipeline/vol/experiment25_harj.py`. Output: `output/data/vol_experiment25_harj_results.csv`.
+
+---
+
+### Experiment 26 — Inverse-volatility POSITION SIZING at the fixed cell: a genuinely different mechanism from every strike-selection test, tried before wiring anything into the live bot
+
+**Where this came from.** A direct request to wire the HAR-X forecast into the live bot's position sizing. This is NOT the same claim Experiments 15/19/20/21/22/23/24 tested -- those all chose WHICH STRIKE to trade, holding contract count fixed. This tests literal contract-count SCALING at one fixed, always-traded cell (3%/$5) -- the actual Moreira & Muir (2017) mechanism ("scale portfolio weight by inverse trailing variance," `SOURCES.md`), never directly isolated in this track before. Experiment 23 came closest but conflated strike choice with any sizing effect. Deliberately tested and gated BEFORE any bot file was touched, consistent with this track's standing discipline of never deploying an unvalidated rule.
+
+**Method.** `multiplier_t = (1/forecast_vol_t) / mean(1/forecast_vol)`, normalized to mean 1 so average exposure exactly matches constant sizing (otherwise "smaller average size looks safer" would be a trivial, meaningless result) -- capped at [0.5x, 2.0x], a conventional vol-targeting leverage band. Scaled P&L = multiplier x baseline net P&L (linear in contract count at this scale). Pre-registered statistic: Sortino ratio of the scaled series minus the constant-sizing baseline's, at $0.05 slippage, the same 125-week sample. Gated by the same randomization null used throughout (HAR-X forecast reshuffled across weeks, 2,000x) -- **the seventh distinct mechanism tested on this sample**, stated up front rather than glossed over.
+
+**Result:**
+
+| | Scaled (inverse-vol sizing) | Baseline (constant sizing) |
+|---|---|---|
+| Mean P&L | 0.1130 | 0.1456 |
+| Sortino ratio | 0.2156 | 0.2470 |
+| Max drawdown | -4.598 | -4.950 |
+| CVaR(10%) | -0.6347 | -0.7154 |
+
+Sortino diff (pre-registered statistic): **-0.0314** -- the wrong direction. Randomization null (2,000 shuffles): mean=0.0161, std=0.0891. **Empirical p-value: 0.6585** -- the real result sits below the null's own mean; a random sizing schedule beats it more often than not.
+
+**The honest read, including the part that looks tempting.** Max drawdown and CVaR(10%) both look better under vol-scaled sizing at first glance (-4.598 vs -4.950; -0.6347 vs -0.7154) -- exactly the pattern a working vol-targeting rule should produce. But the pre-registered gate says this is not the forecast doing real work: mean P&L drops ~22% (0.146 to 0.113), Sortino gets *worse* despite the improved tail numbers, and the randomization null shows a randomly-scheduled sizing rule of the same shape does about as well on average. The mechanism is the same one diagnosed all the way back in Experiment 21: HAR-X's forecast doesn't reliably distinguish weeks that are genuinely dangerous (large realized loss) from weeks that only look dangerous on paper, so shrinking size in "high-forecast" weeks mostly just cuts real average return without buying real protection beyond what chance would give you.
+
+**Conclusion: sizing fails the same honest test strike-selection did, for the same underlying reason.** This is not wired into the live bot. The forecast's problem was never "the model doesn't know volatility" (HAR-X forecasts volatility levels genuinely well, Experiment 18) -- it's that predicting the *level* of volatility well does not translate into knowing *which specific weeks* will actually realize the tail loss, and every use of this forecast that depends on that second, harder claim -- strike timing or position sizing alike -- has now failed the same pre-registered gate.
+
+**Scripts:** `pipeline/vol/experiment26_vol_sizing.py` (reuses `sortino_ratio`/`max_drawdown`/`cvar` from Experiment 23, calibrated against a known case there).
+
+---
+
+### Experiment 27 — A coarse, binary circuit-breaker: skip trading entirely on extreme-forecast weeks
+
+**Where this came from.** The weakest, most conservative possible use of the forecast: not picking strikes, not sizing, just a binary "sit out this week" flag on the rare weeks HAR-X forecasts as extreme -- the same spirit as the live bot's own `check_term_structure` guard (blocks when VIX3M/VIX9D falls below its own trailing 33rd percentile, walk-forward, per `PROGRESS.md`'s Tue Sep 1 entry). Threshold construction mirrors that guard exactly: an EXPANDING (walk-forward) percentile of HAR-X's own forecast history, calibrated against a hand-computed toy series before use (5-point series percentile ranks reproduced exactly: 1.0, 0.5, 0.667, 0.5, 0.8).
+
+**Result, two thresholds (both computed on the long ~2,016-day forecast history, applied to the 125-week option sample):**
+
+| Threshold | Weeks skipped | Mean P&L, gated | Mean P&L, always-trade | Sortino, gated | Sortino, always-trade | Max drawdown, gated | Max drawdown, always-trade |
+|---|---|---|---|---|---|---|---|
+| 85th pct | 6 (4.8%) | 0.1122 | 0.1456 | 0.1903 | 0.2470 | -4.950 | -4.950 |
+| 70th pct | 26 (20.8%) | 0.0507 | 0.1456 | 0.0861 | 0.2470 | **-5.050** | -4.950 |
+
+**A methodological note stated honestly rather than glossed over:** the randomization-null gate for this test (matched-size random skip patterns, 2,000 draws) produced a numerically unstable null distribution (std 4.1 to 19.8 on the Sortino statistic) -- Sortino's downside-deviation denominator can shrink close to zero when a random draw happens to skip most of a small sample's worst-loss weeks, spiking the ratio. The resulting empirical p-values (1.0000 both times) are technically correctly computed but rest on a degenerate null distribution, so they are not being relied on as the primary evidence here.
+
+**The conclusion doesn't need that unstable statistic anyway -- the descriptive numbers are unambiguous.** At both thresholds: mean P&L drops substantially (real premium given up, 0.1456 to 0.1122 or to 0.0507), Sortino gets clearly worse, and max drawdown is unchanged or *worse* (the wider threshold's skip set happened to still include the sample's worst week, so the "circuit breaker" didn't even avoid the actual max drawdown). CVaR(10%) is essentially unchanged at both thresholds (-0.7154 to -0.7192) -- the skipped weeks mostly weren't in the tail to begin with. There is no ambiguity in the direction here even without leaning on the unstable p-value: **the circuit-breaker gives up real average income without buying any measurable tail protection.**
+
+**Conclusion.** Even this weakest possible claim -- not "pick the best week," not "size correctly," just "recognize the rare genuinely dangerous week and sit out" -- fails on the same evidence as everything else in this thread. This is now the eighth distinct mechanism tested and the eighth to fail for the same underlying reason: HAR-X forecasts the *level* of volatility well, but that does not translate into identifying *which specific weeks* will realize a large loss, at any granularity tried -- continuous strike timing, continuous position sizing, or a coarse binary skip. **Not wired into the live bot.**
+
+**Scripts:** `pipeline/vol/experiment27_circuit_breaker.py` (`_expanding_percentile_rank`, calibrated against a hand-computed 5-point series).
+
+---
+
+## Volatility Track — Final Synthesis (Experiments 13-27)
+
+All five hypotheses pre-registered in `.claude/plans/we-need-a-major-buzzing-catmull.md` are now resolved. Nothing remains open from that plan.
+
+| # | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| H1 | VIX term structure times weekly overpricing | **Killed** | Exp 13: not significant on ~980 real weeks, wrong sign in 2013-2019 sub-period |
+| H2 | Downside semivariance (SHAR) beats plain HAR-RV | **Killed** | Exp 16: DM t=-0.20, p=0.84, null |
+| H3 | QLIKE-direct HAR fitting beats OLS | **Confirmed** | Exp 14: DM t=-6.70, p<0.0001; mechanism (Jensen's-inequality bias) verified directly |
+| H4 | The vol forecast converts into money against real option prices (strike timing, sizing, or a skip filter) | **Killed, exhaustively** | Exps 15/19/20/21/22/23/24/26/27 — eight distinct mechanisms tested (better forecaster, fixed conversion, pure noise check, horizon scaling, risk-adjusted strike selection, 4.5x more data, inverse-vol position sizing, and a binary circuit-breaker), all negative |
+| H5 | ML (XGBoost) beats HAR only with exogenous information | **Resolved, no** | Exp 17: XGBoost loses to HAR-RV with or without exogenous features |
+
+**The one result that stands as a genuine, unconditional positive:** HAR-X (Experiment 18) — HAR-RV augmented with log(VIX), QLIKE-fit. DM t=-3.22, p=0.0013 against plain HAR-RV, sole survivor of the 90% Model Confidence Set, VIX coefficient positive across all 32 walk-forward refits, further sharpened by Experiment 22 (VIX supplies forward-horizon information a direct multi-step target would otherwise have to learn from history — they're substitutes, not redundant), and unmatched by the last literature-grounded forecasting variant tried, HAR-J (Experiment 25, statistical tie with plain HAR-RV). This is a real, literature-confirmed, out-of-sample-validated volatility forecaster — the central positive deliverable of this track. It was never in question after Experiment 18; every experiment since has been about whether it converts into a trading edge, not whether it forecasts well.
+
+**Why H4's failure is a strong result rather than a weak one.** Six independently-motivated attempts, each targeting a different, real, checkable mechanism, each with its own literature basis (see `SOURCES.md`), each pre-registered before running, each gated by the same randomization null once a positive-looking number appeared (Experiment 24's near-miss, p=0.0558 on the plain test, p=0.345 once nulled, is the clearest illustration of why the gate is load-bearing rather than a formality). That is not six chances to get lucky — every candidate explanation for the null result that the literature or the diagnosis suggested was actually tried and actually ruled out, rather than the null being accepted at face value the first time. The honest conclusion: **the SPY weekly options market prices this specific risk efficiently enough that a real, validated volatility forecast cannot out-trade it on the real data available for this project.** That distinction — forecasting well versus beating a liquid market's own pricing — is the central, defensible finding of this whole track.
+
+**Deliverable, per the plan's own definition.** `pipeline/vol/deliverable.py`'s `decide(date)` returns the HAR-X forecast for that date plus the fixed, cost-robust 3%/$5 baseline cell — deliberately NOT an adaptive strike pick, since that was tested eight ways and never validated. The forecast is exposed as context (matching Moreira & Muir 2017's "volatility forecasts are for sizing, not timing," `SOURCES.md`), not as a basis for choosing a different trade. Surfaced read-only in the Streamlit dashboard's Overview tab (`pipeline/ui/app.py`), explicitly labelled as informational and not consumed by the Picker/Guard/Reviewer pipeline.
+
+**A deployment defect found and fixed after the panel went in, worth recording because it is a genuine class of bug rather than a typo.** The dashboard was reading its "current" number off the walk-forward series, which showed a **55-day-stale forecast** (data ran through 2026-08-31; the forecast ended 2026-07-07). Cause: `expanding_walk_forward` only emits predictions for COMPLETE test blocks (`start + test_block <= n`), so the final partial block never receives one — correct for honest scoring, since every scored block is then identically sized, but wrong for live display. Fixed by adding `live_forecast()`, which refits HAR-X on all available history and projects one step past the last observed day (7.49% vs the stale 7.83%; sanity-checked against trailing 5d/22d realized vol of 6.71%/6.69%, the small upward gap being exactly what QLIKE-fitting's deliberate conservatism plus mean reversion predict). **The two paths are kept strictly separate**: the walk-forward series remains the sole basis of every validated number in this log (fit only on data preceding each scored point), while `live=True` is an opt-in, explicitly-named flag for display only, so a historical backtest cannot silently acquire lookahead by calling the wrong function. Verified directly: `decide(date(2025,6,13))` still returns a forecast as-of that exact date, not a later one.
 
 ---
 

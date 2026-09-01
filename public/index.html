@@ -57,6 +57,17 @@
       <p class="card-note" id="volatility-verdict"></p>
     </div>
 
+    <div class="card" id="card-vol-forecast" hidden>
+      <div class="card-head">
+        <div class="card-title">Volatility forecast (research track)</div>
+        <button class="info-btn" type="button" aria-label="More about this card">?</button>
+        <span class="info-tip" role="tooltip">HAR-X: a HAR realized-volatility model augmented with VIX, fit by QLIKE. Beats naive, EWMA, plain HAR, and XGBoost out of sample (EXPERIMENT.md, Exp. 14/18). Shown as context; it does not drive any trade decision.</span>
+      </div>
+      <div class="card-subtitle">What a validated model expects for the week ahead</div>
+      <div class="metric-row" id="vol-forecast-metrics"></div>
+      <p class="card-note" id="vol-forecast-note"></p>
+    </div>
+
     <div class="card" id="card-path">
       <div class="card-head">
         <div class="card-title">Today's decision path</div>

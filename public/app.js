@@ -161,6 +161,27 @@ function renderVolatility(overview) {
   verdict.textContent = v.verdict_text;
 }
 
+// Research-track volatility forecast (HAR-X). Rendered only when
+// data/vol_forecast.json is present -- the card stays hidden otherwise, so a
+// missing or stale export degrades to "not shown" rather than an error.
+function renderVolForecast(vf) {
+  if (!vf) return;
+  const card = document.getElementById("card-vol-forecast");
+  const box = document.getElementById("vol-forecast-metrics");
+  const note = document.getElementById("vol-forecast-note");
+  if (!card || !box) return;
+  box.innerHTML = "";
+  box.appendChild(
+    metric("Forecast vol (annualized)", `${fmtNum(vf.forecast_vol_annualized_pct, 2)}%`,
+           `Data through ${vf.data_through}`)
+  );
+  box.appendChild(
+    metric(`Breach prob. (${fmtNum(vf.breach_distance_pct, 0)}% / weekly)`, fmtPct(vf.breach_prob, 2))
+  );
+  if (note) note.textContent = vf.note || "";
+  card.hidden = false;
+}
+
 function renderDecisionPath(overview) {
   const box = document.getElementById("decision-path");
   box.innerHTML = "";
@@ -445,10 +466,21 @@ async function main() {
     account = { available: false, reason: "request failed" };
   }
 
+  // Fetched separately from the Promise.all above ON PURPOSE: this file is
+  // optional, and a 404 inside that block would take down the whole
+  // dashboard rather than just this one card.
+  let volForecast = null;
+  try {
+    volForecast = await fetchJSON("data/vol_forecast.json");
+  } catch (e) {
+    volForecast = null;
+  }
+
   renderStatus(overview.status);
   renderAccount(account);
   renderMarket(overview);
   renderVolatility(overview);
+  renderVolForecast(volForecast);
   renderDecisionPath(overview);
   renderPositions(overview, account);
 
