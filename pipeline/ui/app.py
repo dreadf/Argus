@@ -170,6 +170,30 @@ except Exception as e:
 else:
     curve_error = None
 
+today_snapshot = None
+try:
+    from pipeline.data.vix import contango_ratio, current_contango_and_threshold, load_cached_vix
+    from pipeline.options.chain import get_spot
+    from pipeline.options.vol import fetch_recent_closes
+
+    _spot = get_spot()
+    _closes = fetch_recent_closes()
+    _vix9d = load_cached_vix("VIX9D")
+    _vix3m = load_cached_vix("VIX3M")
+    _, _contango_threshold = current_contango_and_threshold()
+    today_snapshot = {
+        "spot": _spot,
+        "yesterday_move_pct": float(_closes.pct_change().iloc[-1]),
+        "vix9d": float(_vix9d.iloc[-1]),
+        "vix3m": float(_vix3m.iloc[-1]),
+        "contango": float(contango_ratio(_vix9d, _vix3m).iloc[-1]),
+        "contango_threshold": _contango_threshold,
+    }
+except Exception as e:
+    snapshot_error = str(e)
+else:
+    snapshot_error = None
+
 gate_df, gate_choice = None, None
 gate_path = "output/data/evidence_gate_results.csv"
 try:
@@ -250,31 +274,86 @@ tab_overview, tab_track_record, tab_evidence, tab_log, tab_how = st.tabs(
 )
 
 # ---------------------------------------------------------------------------
-# Overview: the one screen a first-time viewer should be able to read
-# start to finish and come away knowing what this is, whether it currently
-# works, and whether it's doing anything right now. Everything dense lives
-# in the other tabs, one click away, not competing for attention here.
+# Overview: an operations view of TODAY, not a backtest teaser (that lives
+# in Track record). Order: what's open right now -> today's raw market
+# data -> what that data means for the guards -> the bigger picture, last.
 # ---------------------------------------------------------------------------
 with tab_overview:
+    st.markdown("##### Current positions")
     if account_error is not None:
-        st.info(f"Live account data unavailable right now ({account_error}). Figures below come from the backtest instead.")
-
-    if account_state is not None:
-        n_open = len(account_state["open_positions"])
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Equity", f"${account_state['current_equity']:,.0f}",
-                    help="Total account value, cash plus any open positions marked to market.")
-        col2.metric("Options buying power", f"${account_state['options_buying_power']:,.0f}",
-                    help="How much the broker will let this account commit to new options positions right now.")
-        col3.metric("Positions open", f"{n_open} of {MAX_CONCURRENT_POSITIONS}",
+        st.info(f"Live account data unavailable right now ({account_error}).")
+    elif account_state is not None:
+        raw_positions = account_state.get("raw_positions") or []
+        if not raw_positions:
+            st.write("No open positions right now.")
+        else:
+            rows = [{
+                "symbol": p.symbol, "side": str(p.side).replace("PositionSide.", ""),
+                "qty": p.qty,
+                "avg entry": f"${float(p.avg_entry_price):.2f}",
+                "current": f"${float(p.current_price):.2f}" if p.current_price is not None else "-",
+                "unrealized P&L": f"${float(p.unrealized_pl):+,.2f}" if p.unrealized_pl is not None else "-",
+            } for p in raw_positions]
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        col1, col2 = st.columns(2)
+        col1.metric("Equity", f"${account_state['current_equity']:,.0f}")
+        col2.metric("Positions open", f"{len(raw_positions)} of {MAX_CONCURRENT_POSITIONS}",
                     help="Concurrent put credit spreads open now, against the hard cap the Guard enforces.")
-        col4.metric("Options level", account_state["options_approved_level"],
-                    help="Alpaca's own broker-approved permission tier (0-3). Level 3 is required to trade "
-                         "defined-risk multi-leg spreads like this system's put credit spreads -- it's the "
-                         "account's real regulatory clearance, not something this app computes.")
 
     st.write("")
-    st.markdown("##### Does this make money, and is it safe?")
+    st.markdown("##### Manual controls")
+    st.caption(
+        "This system is fully autonomous by design -- these are shown disabled rather than left out, "
+        "so the restriction is visible instead of silent."
+    )
+    c1, c2 = st.columns(2)
+    c1.button(
+        "Approve today's proposal", disabled=True,
+        help="There is no manual approval step by design -- the Guard and Reviewer decide autonomously.",
+    )
+    c2.button(
+        "Force-close all positions", disabled=True,
+        help="Reserved for a local session with CONTROLS_ENABLED=true, never the public deployment -- "
+             "this connects to a real brokerage account.",
+    )
+
+    st.write("")
+    st.markdown("##### Today's SPY & volatility snapshot")
+    if snapshot_error is not None:
+        st.info(f"Live market data unavailable right now ({snapshot_error}).")
+    elif today_snapshot is not None:
+        s = today_snapshot
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("SPY spot", f"${s['spot']:.2f}")
+        col2.metric("Yesterday's move", f"{s['yesterday_move_pct']:+.2%}",
+                    help="The gap-risk leg of the volatility-regime guard blocks a new trade above 2% in either direction.")
+        col3.metric("VIX9D / VIX3M", f"{s['vix9d']:.1f} / {s['vix3m']:.1f}",
+                    help="CBOE's 9-day and 3-month implied volatility indices -- the inputs to the term-structure guard.")
+        col4.metric("Contango (VIX3M/VIX9D)", f"{s['contango']:.3f}",
+                    help="Below its own trailing 33rd percentile means the term structure is flattening/inverting.")
+
+        st.markdown("**What this means today:**")
+        if abs(s["yesterday_move_pct"]) > 0.02:
+            st.write(f"- SPY moved {s['yesterday_move_pct']:+.1%} yesterday, past the 2% gap-risk threshold -- "
+                     "the volatility-regime guard would block a new trade today.")
+        else:
+            st.write(f"- SPY moved {s['yesterday_move_pct']:+.1%} yesterday, within the normal range -- "
+                     "no block from the gap-risk guard.")
+        if s["contango_threshold"] is not None:
+            if s["contango"] < s["contango_threshold"]:
+                st.write(f"- Term structure is flattening ({s['contango']:.3f} < trailing 33rd pct "
+                         f"{s['contango_threshold']:.3f}) -- the term-structure guard would block a new trade today.")
+            else:
+                st.write(f"- Term structure is normal ({s['contango']:.3f} >= trailing 33rd pct "
+                         f"{s['contango_threshold']:.3f}) -- no block from this guard today.")
+        else:
+            st.write("- Not enough trailing history yet to set a term-structure threshold.")
+    else:
+        st.warning("Could not compute today's snapshot.")
+
+    st.write("")
+    st.divider()
+    st.markdown("##### The bigger picture")
 
     if curve_df is not None:
         dd_u, dd_f = _max_dd(curve_df["cum_pnl_unfiltered"]), _max_dd(curve_df["cum_pnl_filtered"])
@@ -290,19 +369,16 @@ with tab_overview:
     else:
         st.warning("Reconstruction not computed yet -- run `python -m pipeline.backtest.reconstruct`.")
 
-    st.write("")
-    st.markdown("##### Is today's trade actually justified?")
     if gate_df is not None:
         if gate_choice is None:
             st.warning("No (distance, width) combination currently clears the evidence bar. The system declines to trade, on purpose.")
         else:
             n_survivors = int(gate_df["passes_gate"].sum())
             st.success(
-                f"Yes -- **{gate_choice['distance']:.0%} distance, ${gate_choice['width']:.0f} width** clears its statistical "
-                f"bar with a **{gate_choice['cushion_se']:.2f} standard-error cushion** ({n_survivors} of {len(gate_df)} "
-                f"combinations tested currently qualify)."
+                f"Today's evidence: **{gate_choice['distance']:.0%} distance, ${gate_choice['width']:.0f} width** clears its "
+                f"statistical bar with a **{gate_choice['cushion_se']:.2f} standard-error cushion** ({n_survivors} of "
+                f"{len(gate_df)} combinations tested currently qualify). Full sweep in the **Evidence** tab."
             )
-        st.caption("The full sweep of every combination tested is in the **Evidence** tab.")
     else:
         st.warning("Evidence gate not computed yet.")
 
