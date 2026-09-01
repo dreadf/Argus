@@ -24,6 +24,13 @@ evaluate_position/evaluate_account are pure functions on plain dicts, same
 design as guards.py, for the same reason: unit-testable without a live
 broker connection, and replayable against the backtest for a false-trip
 check on the profit-target and day-before-expiry rules.
+
+Every cycle records a heartbeat (recovery.record_heartbeat), including a
+cycle where nothing happens -- a lightweight timestamp file, not a full
+audit-log row (every 15 minutes would otherwise flood the schema-locked
+audit log with no-op entries). recovery.check_heartbeat_stale reads it
+back; a gap of more than a few cycles with positions still open means this
+loop stopped running, which is otherwise silent.
 """
 
 from __future__ import annotations
@@ -164,6 +171,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     from pipeline.audit.log import append_entry
     from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
     from pipeline.execution.positions import open_spread_positions
+    from pipeline.execution.recovery import record_heartbeat
     from pipeline.options.chain import fetch_option_mids
     from pipeline.options.contracts import parse_occ_symbol
 
@@ -172,11 +180,13 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     clock = get_clock()
     if not clock["market_open"]:
+        record_heartbeat("SKIPPED_MARKET_CLOSED")
         return {"outcome": "SKIPPED", "reason": "market closed", "closed": []}
 
     client = get_trading_client()
     positions = open_spread_positions()
     if not positions:
+        record_heartbeat("NO_OPEN_POSITIONS")
         return {"outcome": "NO_OPEN_POSITIONS", "closed": []}
 
     account = get_account_state(open_positions=positions)
@@ -241,6 +251,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         })
         closed.append({"position": position, "action": action_result["action"]})
 
+    record_heartbeat("OK")
     return {"outcome": "OK", "closed": closed}
 
 

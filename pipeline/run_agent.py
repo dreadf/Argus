@@ -21,6 +21,7 @@ from pipeline.audit.log import append_entry, read_log
 from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
 from pipeline.execution.orders import submit_open_order
 from pipeline.execution.positions import open_spread_positions
+from pipeline.execution.recovery import reconcile_positions, verify_fill_or_emergency_close
 from pipeline.options.chain import fetch_chain, get_spot
 from pipeline.options.contracts import expiries_in_window
 from pipeline.options.selector import select_spread
@@ -124,6 +125,22 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         print(f"Data or account fetch failed ({e}). Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": f"fetch failed: {e}"}
 
+    # recovery.py job #1: reconcile before acting. The broker's actual
+    # positions are truth, never the audit log alone -- if it holds an
+    # option leg this system's own bookkeeping doesn't know about (a
+    # manual trade, a crash between fill and log write), opening a new
+    # position on top of unknown exposure is unsafe.
+    reconcile = reconcile_positions(account["raw_positions"])
+    if not reconcile["safe_to_open"]:
+        append_entry({
+            "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
+            "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
+            "outcome": "SKIPPED",
+            "guards_failed": [f"RECONCILE_MISMATCH: broker holds unrecognized option position(s): {reconcile['broker_only']}"],
+        })
+        print(f"Reconcile failed: broker holds unrecognized positions {reconcile['broker_only']}. Logged SKIP, not opening.")
+        return {"outcome": "SKIPPED", "reason": "reconcile mismatch", "broker_only": reconcile["broker_only"]}
+
     proposal = select_spread(chain_df, spot, gate_df, account, today=today)
     if proposal is None:
         append_entry({
@@ -199,6 +216,15 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     order_result = submit_open_order(get_trading_client(), proposal, dry_run=dry_run)
 
+    # recovery.py job #2: after every LIVE submission, confirm both legs
+    # actually filled in equal quantity before doing anything else. An
+    # orphaned short put has no floor at all -- the one scenario where
+    # this system's stated max loss stops being true. dry_run short-
+    # circuits to ok/no-halt without touching the broker.
+    fill_check = verify_fill_or_emergency_close(get_trading_client(), proposal, dry_run=dry_run)
+    if fill_check["halt"]:
+        print(f"HALT: {fill_check['reason']}")
+
     append_entry({
         "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
         "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
@@ -215,7 +241,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     print(f"{'[DRY RUN] ' if dry_run else ''}Proposal accepted and logged: {proposal['short_symbol']}/{proposal['long_symbol']}, "
           f"{proposal['contracts']} contracts, credit ${proposal['credit_per_contract']:.2f}/contract "
           f"(Reviewer: {proposal['reviewer_decision']})")
-    return {"outcome": "DRY_RUN" if dry_run else "SOLD", "proposal": proposal, "order_result": order_result}
+    return {"outcome": "DRY_RUN" if dry_run else "SOLD", "proposal": proposal, "order_result": order_result, "halt": fill_check["halt"]}
 
 
 if __name__ == "__main__":
