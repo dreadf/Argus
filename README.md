@@ -30,13 +30,13 @@ The machine-learning experiments in this repo are **not** part of the trading sy
 
 ## What it returns, stated up front
 
-About 4.8% a year on the account, with a 5.9% worst drawdown. SPY buy-and-hold returned about 15.0% a year over the same period, with a 32.1% drawdown. Risk-adjusted, that is a Sharpe of 0.56 against SPY's 0.69, roughly 80% of the index's risk-adjusted return, at a fifth of its drawdown. But risk-adjusted comparisons like this one are exactly what this project's own audit (Experiment 29) found reason to distrust: correcting for the 30 things tried against this data (the project's full [`EXPERIMENT.md`](EXPERIMENT.md) ledger), that 0.56 Sharpe is not statistically distinguishable from the best of 30 lucky tries (Deflated Sharpe Ratio = 0.20 at N=30). We are publishing that correction rather than the bare number, because a number nobody has stress-tested against how many times it was allowed to be wrong is not a number worth leading with.
+About 4.8% a year on the account, with a 5.9% worst drawdown. SPY buy-and-hold returned about 15.0% a year over the same period, with a 32.1% drawdown. Risk-adjusted, that is a Sharpe of 0.56 against SPY's 0.69, roughly 80% of the index's risk-adjusted return, at a fifth of its drawdown. But risk-adjusted comparisons like this one are exactly what this project's own audit (Experiment 29) found reason to distrust: correcting for the 31 things tried against this data (the project's full [`EXPERIMENT.md`](EXPERIMENT.md) ledger), that 0.56 Sharpe is not statistically distinguishable from the best of 31 lucky tries (Deflated Sharpe Ratio = 0.20 at N=31). We are publishing that correction rather than the bare number, because a number nobody has stress-tested against how many times it was allowed to be wrong is not a number worth leading with.
 
 | Trials tested (N) | 1 | 5 | 10 | 30 | 100 |
 |---|---|---|---|---|---|
 | Deflated Sharpe Ratio | 0.894 | 0.523 | 0.372 | 0.205 | 0.100 |
 
-N=30 is this project's actual trial count as of today; it will rise again once further hypotheses are tested, so treat a bare "DSR=0.2" as dated the moment that happens. Full derivation, reproducible with no credentials or network in about 17 seconds (`python -m pipeline.falsify.audit`): [`EXPERIMENT_29_SHARPE_AUDIT.md`](EXPERIMENT_29_SHARPE_AUDIT.md).
+N=31 is this project's actual trial count as of today (it rose from 30 the same week this was written, when Experiment 30 re-verified the ML track's null result against corrected data -- see EXPERIMENT.md and pipeline/falsify/trial_count.py for exactly which changes count as a new trial and which don't); it will rise again once further hypotheses are tested, so treat a bare "DSR=0.2" as dated the moment that happens. Full derivation, reproducible with no credentials or network in about 17 seconds (`python -m pipeline.falsify.audit`): [`EXPERIMENT_29_SHARPE_AUDIT.md`](EXPERIMENT_29_SHARPE_AUDIT.md).
 
 This strategy is not designed to beat the market. It is sized so that it cannot blow up, and that same sizing is why it earns little. We would rather lead with those numbers than have you find them.
 
