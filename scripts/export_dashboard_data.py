@@ -378,12 +378,40 @@ def build_track_record() -> dict:
             "spy_indexed": curve_df["spy_indexed"].round(2).tolist(),
             "cash_indexed": curve_df["cash_indexed"].round(2).tolist(),
         }
+
+        traded = curve_df[curve_df["traded"]]
+        wins = traded[traded["win"]]["pnl_filtered"]
+        losses = traded[~traded["win"]]["pnl_filtered"]
+        final_filtered = float(curve_df["cum_pnl_filtered"].iloc[-1])
+        final_unfiltered = float(curve_df["cum_pnl_unfiltered"].iloc[-1])
+        spy_final_pct = float(curve_df["spy_indexed"].iloc[-1] / 100 - 1)
+        cash_final_pct = float(curve_df["cash_indexed"].iloc[-1] / 100 - 1)
+        date_range = f"{curve_df['entry'].iloc[0]:%Y}-{curve_df['entry'].iloc[-1]:%Y}"
+
         result["stats"] = {
             "dd_unfiltered": dd_u, "dd_filtered": dd_f,
             "worst_year_unfiltered": _worst_year(curve_df, "pnl_unfiltered"),
             "worst_year_filtered": _worst_year(curve_df, "pnl_filtered"),
             "weeks_traded": int(curve_df["traded"].sum()), "weeks_total": int(len(curve_df)),
+            "win_rate": float(traded["win"].mean()),
+            "avg_win": float(wins.mean()), "avg_loss": float(losses.mean()),
+            "n_wins": int(len(wins)), "n_losses": int(len(losses)),
+            "profit_factor": float(wins.sum() / abs(losses.sum())),
+            "best_week": float(traded["pnl_filtered"].max()), "worst_week": float(traded["pnl_filtered"].min()),
+            "final_filtered": final_filtered, "final_unfiltered": final_unfiltered,
+            "spy_final_pct": spy_final_pct, "cash_final_pct": cash_final_pct,
+            "date_range": date_range,
         }
+        # One honest sentence covering the actual trade-off (not "strictly
+        # better" -- less total $ collected, in exchange for far less
+        # drawdown), computed from the same numbers as the chart and tiles
+        # rather than asserted separately, so it can't drift out of sync.
+        result["equity_headline"] = (
+            f"Collected ${final_filtered:.2f}/contract over {int(curve_df['traded'].sum())} traded weeks "
+            f"({len(curve_df)} total, {date_range}), vs ${final_unfiltered:.2f} trading every week "
+            f"(${final_unfiltered - final_filtered:.2f} less) - but cut the worst drawdown by "
+            f"{(1 - dd_f / dd_u):.0%} (${dd_f:.2f} vs ${dd_u:.2f})."
+        )
     except Exception as e:
         result["errors"]["equity_curve"] = str(e)
 

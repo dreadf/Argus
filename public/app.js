@@ -289,10 +289,7 @@ function renderEquityChart(tr) {
     options: chartOptions("$ per contract"),
   }));
 
-  // Also inside a collapsed <details> -- same zero-width-at-construction
-  // problem as a hidden tab, plus it needs a resize when the reader
-  // actually opens it later.
-  const referenceChart = new Chart(document.getElementById("reference-chart"), {
+  window.dashboardCharts.push(new Chart(document.getElementById("reference-chart"), {
     type: "line",
     data: {
       labels: c.dates,
@@ -302,8 +299,9 @@ function renderEquityChart(tr) {
       ],
     },
     options: chartOptions("Indexed to 100"),
-  });
-  document.querySelector("#tab-track-record details").addEventListener("toggle", () => referenceChart.resize());
+  }));
+
+  if (tr.equity_headline) document.getElementById("equity-headline").textContent = tr.equity_headline;
 }
 
 function chartOptions(yLabel) {
@@ -322,12 +320,28 @@ function chartOptions(yLabel) {
 
 function renderTrackRecordStats(tr) {
   const box = document.getElementById("track-record-metrics");
+  const tradeBox = document.getElementById("trade-stats");
+  const benchmarkNote = document.getElementById("benchmark-note");
   box.innerHTML = "";
+  if (tradeBox) tradeBox.innerHTML = "";
   if (!tr.stats) return;
   const s = tr.stats;
   box.appendChild(metric("Max drawdown, $/contract", fmtNum(s.dd_filtered), `${fmtNum(s.dd_filtered - s.dd_unfiltered)} vs. unfiltered`));
   box.appendChild(metric("Worst year, filtered", `${s.worst_year_filtered.pnl >= 0 ? "+" : ""}${fmtNum(s.worst_year_filtered.pnl)}`, `Year ${s.worst_year_filtered.year}. Unfiltered: ${fmtNum(s.worst_year_unfiltered.pnl)} in ${s.worst_year_unfiltered.year}.`));
   box.appendChild(metric("Weeks traded", `${s.weeks_traded} of ${s.weeks_total}`));
+
+  if (tradeBox) {
+    tradeBox.appendChild(metric("Win rate", fmtPct(s.win_rate, 1), `${s.n_wins} wins, ${s.n_losses} losses`, s.win_rate >= 0.5 ? "good" : "bad"));
+    tradeBox.appendChild(metric("Profit factor", fmtNum(s.profit_factor, 2), "Gross wins ÷ gross losses", s.profit_factor >= 1 ? "good" : "bad"));
+    tradeBox.appendChild(metric("Avg win / avg loss", `${fmtMoney2(s.avg_win)} / ${fmtMoney2(s.avg_loss)}`, "Per traded week, $/contract"));
+    tradeBox.appendChild(metric("Best / worst week", `${fmtMoney2(s.best_week)} / ${fmtMoney2(s.worst_week)}`, "Single-week extremes, $/contract"));
+  }
+
+  if (benchmarkNote) {
+    benchmarkNote.textContent = `SPY buy-and-hold returned ${fmtPctSigned(s.spy_final_pct, 0)} over ${s.date_range} (full market exposure); `
+      + `cash at 3%/yr returned ${fmtPctSigned(s.cash_final_pct, 0)}. Neither carries the same risk as a defined-loss options `
+      + `spread, so these are context, not a head-to-head with the $${fmtNum(s.final_filtered, 2)}/contract chart above.`;
+  }
 }
 
 function renderValidation(tr) {

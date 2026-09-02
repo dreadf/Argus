@@ -98,13 +98,24 @@
         <span class="info-tip" role="tooltip">Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).</span>
       </div>
       <div class="card-subtitle">Cumulative $ per contract: trade every week vs. the VIX term-structure filter</div>
+      <p class="card-note" id="equity-headline"></p>
       <div class="chart-wrap"><canvas id="equity-chart" role="img" aria-label="Cumulative profit and loss per contract from 2016 to 2026, comparing trading every week against the VIX term-structure filter"></canvas></div>
       <div class="metric-row" id="track-record-metrics"></div>
-      <details>
-        <summary>SPY and cash, for shape comparison (indexed, not dollar-matched)</summary>
-        <div class="card-subtitle">Shape comparison only, not on the same $-per-contract basis as the chart above.</div>
+
+      <div class="card-section">
+        <div class="card-section-label">Trade statistics</div>
+        <div class="metric-row" id="trade-stats"></div>
+      </div>
+
+      <div class="card-section">
+        <div class="card-section-label">
+          Benchmark: SPY buy-and-hold and cash
+          <button class="info-btn" type="button" aria-label="More about this benchmark">?</button>
+          <span class="info-tip" role="tooltip">Indexed to 100 at the start, not dollar-matched to the $-per-contract chart above -- SPY buy-and-hold carries full equity market exposure; this strategy risks a small, defined amount per contract. Shown for context, not as an apples-to-apples comparison.</span>
+        </div>
+        <p class="card-note" id="benchmark-note"></p>
         <div class="chart-wrap"><canvas id="reference-chart" role="img" aria-label="SPY price and a 3 percent annual cash rate, both indexed to 100, for shape comparison"></canvas></div>
-      </details>
+      </div>
     </div>
 
     <div class="card card-half" id="card-validation">

@@ -2713,7 +2713,20 @@
       "pnl": -1.670197295145463
     },
     "weeks_traded": 355,
-    "weeks_total": 538
+    "weeks_total": 538,
+    "win_rate": 0.9887323943661972,
+    "avg_win": 0.09559572366986442,
+    "avg_loss": -3.526696450882547,
+    "n_wins": 351,
+    "n_losses": 4,
+    "profit_factor": 2.3785786128350783,
+    "best_week": 0.5369253059852284,
+    "worst_week": -4.7015151494485075,
+    "final_filtered": 19.44731320459224,
+    "final_unfiltered": 24.028917790453875,
+    "spy_final_pct": 3.008274151612886,
+    "cash_final_pct": 0.35696620588506156,
+    "date_range": "2016-2026"
   },
   "validation": {
     "correlation": 0.9722167745098543,
@@ -2788,5 +2801,6 @@
     ],
     "bar": 0.3
   },
-  "errors": {}
+  "errors": {},
+  "equity_headline": "Collected $19.45/contract over 355 traded weeks (538 total, 2016-2026), vs $24.03 trading every week ($4.58 less) - but cut the worst drawdown by 75% ($4.70 vs $18.65)."
 }

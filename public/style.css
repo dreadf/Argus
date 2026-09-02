@@ -115,12 +115,16 @@ body {
 .equation .eq-verdict.bad { color: #2B0906; background: var(--bad); }
 .equation .eq-verdict.neutral { color: var(--text); background: var(--border); }
 
-.narrative-line { display: flex; gap: 0.9rem; padding: 0.45rem 0; align-items: baseline; flex-wrap: wrap; }
-.narrative-label { font-weight: 700; min-width: 11rem; flex-shrink: 0; }
+.narrative-line { display: grid; grid-template-columns: 11.5rem 1fr; gap: 0.9rem; padding: 0.45rem 0; align-items: baseline; }
+.narrative-label { font-weight: 700; }
 .narrative-label.good { color: var(--good); }
 .narrative-label.bad { color: var(--bad); }
 .narrative-label.neutral { color: var(--muted); }
 .narrative-detail { color: var(--text-dim); font-size: 0.95rem; min-width: 0; }
+
+@media (max-width: 30rem) {
+  .narrative-line { grid-template-columns: 1fr; gap: 0.15rem; }
+}
 .status-line .time { color: var(--muted-dim); font-size: 0.85em; }
 
 .navbar {
