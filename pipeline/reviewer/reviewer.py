@@ -56,7 +56,7 @@ def _fetch_account_context() -> dict:
 
 
 def _build_prompt(proposal: dict, guard_result: dict, account_context: dict) -> str:
-    return f"""You are the final review step for an automated options-selling agent, AFTER every fixed rule and every hard risk guard has already approved this trade. You are not the primary decision-maker -- the Picker (fixed rules) chose this spread and 14 Guards already checked it. Your only powers are:
+    return f"""You are the final review step for an automated options-selling agent, AFTER every fixed rule and every hard risk guard has already approved this trade. You are not the primary decision-maker -- the Picker (fixed rules) chose this spread and 15 Guards already checked it. Your only powers are:
 
 1. APPROVE the proposal exactly as sized.
 2. SHRINK it: give a multiplier strictly between 0 and 1, applied to contract count. You can never increase size.
