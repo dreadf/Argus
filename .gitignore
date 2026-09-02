@@ -24,6 +24,11 @@ output/audit/*.jsonl
 !EXPERIMENT_28_VRP.md
 !EXPERIMENT_29_SHARPE_AUDIT.md
 !SUBMISSION_CHECKLIST.md
+# WRITEUP.md is the actual hackathon submission document -- caught silently
+# by the same blanket *.md rule that already hid EXPERIMENT_28_VRP.md,
+# SUBMISSION_CHECKLIST.md, and three reproducibility CSVs before it. Found
+# during a final pre-submission stress test, same day as the deadline.
+!WRITEUP.md
 # Reproducibility fix (found during Experiment 29's own verifiability check):
 # reconstruct.replay() -- and everything downstream of it (vrp_measure.py,
 # pipeline/falsify/audit.py) -- needs these three to run at all. They were
