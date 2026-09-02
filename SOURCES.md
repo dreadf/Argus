@@ -124,6 +124,42 @@ timing filter) was killed** — not significant, and wrong sign in the
 expected direction. Recorded as a real negative result, not omitted because
 the citations "should have" worked.
 
+## Volatility risk premium (options-selling economic prior)
+
+Deferred since the trading system's design phase (see `SUBMISSION_CHECKLIST.md`),
+added now as the write-up's economic prior for why selling defined-risk credit
+spreads should earn a premium at all, distinct from the VIX-term-structure
+timing question above (H1, killed).
+
+- **Bakshi, G. & Kapadia, N. (2003), "Delta-Hedged Gains and the Negative
+  Market Volatility Risk Premium," Review of Financial Studies 16(2),
+  527-566.** Delta-hedged S&P 500 option portfolios earn systematically
+  negative returns, and the underperformance is larger at higher volatility.
+  Interpreted as compensation paid to the seller of volatility risk, not an
+  anomaly. This is the standing economic reason a credit-spread seller
+  should expect a premium at all, independent of any timing signal.
+
+- **Carr, P. & Wu, L. (2009), "Variance Risk Premiums," Review of Financial
+  Studies 22(3), 1311-1341.** Quantifies the variance risk premium across
+  five equity indices and thirty-five individual stocks using synthetic
+  variance swaps, finding it consistently negative and priced. Corroborates
+  Bakshi & Kapadia's finding via a different instrument (variance swaps
+  rather than delta-hedged option portfolios).
+
+- **Cboe S&P 500 PutWrite Index (PUT), June 1986 to December 2018.** A
+  long-running benchmark for one-month at-the-money cash-secured put
+  writing: approximately 9.5% annualized return at approximately 10%
+  volatility over that window, against approximately 9.8% at approximately
+  15% volatility for the S&P 500 itself. **What this does and does not
+  establish for this project:** it supports the existence and persistence of
+  a volatility risk premium in equity index options generally. It does
+  **not** validate this project's specific strategy. PUT is a different
+  instrument on a different horizon, at-the-money cash-secured puts rolled
+  monthly, versus the out-of-the-money, defined-risk, 7-11 DTE weekly credit
+  spreads traded here. It is the economic prior, not evidence about this
+  strategy's own edge, which is what `EXPERIMENT_29_SHARPE_AUDIT.md`
+  measures directly instead.
+
 ## Risk management / breach probability (H4)
 
 - **Barone-Adesi, G., Giannopoulos, K. & Vosper, R. (1999), and the standard
