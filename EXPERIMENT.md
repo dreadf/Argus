@@ -401,6 +401,26 @@ Raw market columns (`*_mkt`) were deliberately **excluded** from the feature set
 
 ---
 
+## Experiment 30 — Re-verifying the null-signal conclusion after the split-adjustment fix
+
+**Why:** `output/data/raw_*.csv` was found (2026-09-02, `PROGRESS.md`) to be un-split-adjusted: Alpaca's default bar request has no `adjustment` parameter, so every price-derived feature and the 5-day forward-return target were contaminated around real stock splits (NVDA 10:1, GOOGL/AMZN 20:1, AAPL 4:1), each reading as a fake ~-90% single-day crash. `pipeline/extract.py` was fixed (`adjustment=Adjustment.ALL`) and all 40 symbols were refetched, but `output/data/engineered_*.csv` and every model trained on it (Experiments 5-10) were generated from the OLD contaminated raw data and never re-run. This entry closes that gap: every reported ML number as of Experiment 10 needed re-verification, not just a caveat.
+
+**What we did:** re-ran `engineer_features` for all 40 symbols against the corrected raw data, then re-ran Experiments 8 and 9's exact model configurations (market-relative features, with and without `news_count`) and Experiment 10's exact IC methodology, unchanged, via a new committed script (`pipeline/model/rerun_after_split_fix.py`, `python -m pipeline.model.rerun_after_split_fix`, ~10s, no network). One addition: a fixed XGBoost `random_state` (the original Experiments 8/9 runs used none), needed only so this file's own numbers are reproducible on demand -- it does not change what is being tested. A second, pre-existing latent bug was found and fixed en route: `add_news_features` in `panel.py` tried to merge a tz-aware (UTC) panel timestamp against the tz-naive one `add_news_features` itself builds for the news side, which pandas refuses (`ValueError: You are trying to merge tz-aware and tz-naive datetime columns`) -- this had never actually been exercised end-to-end before (`output/data/raw_news.csv` postdates the last time anyone ran the full pipeline), so it was latent, not something the split fix introduced. Fixed with a `tz_localize(None)` on the panel side, matching the pattern already used on the news side.
+
+**Results:**
+
+| | Experiment 8 (original, contaminated data) | Experiment 8 re-run (corrected data) | Experiment 9 (original, contaminated data) | Experiment 9 re-run (corrected data) |
+|---|---|---|---|---|
+| Test ROC-AUC | 0.502 | 0.513 | 0.509 | 0.515 |
+| mean_ic | -0.0048 | +0.0108 | -0.0038 | +0.0164 |
+| t_stat_non_overlap | -0.73 | -0.35 | -1.13 | -0.27 |
+
+**Interpretation:** both re-run variants remain **statistically indistinguishable from zero IC** (|t| well under the 2.0 bar), matching Experiment 10's original conclusion. AUC ticked up slightly (0.502→0.513, 0.509→0.515) and both `mean_ic` signs flipped from negative to positive, but neither change is meaningful against a bar of |t|=2.0 on `n_eff=63` -- this is exactly the kind of small movement Experiment 10 itself warned not to over-read from AUC alone. **The split-adjustment contamination did not change the qualitative finding.** This is itself a reassuring result, not a null one: the project's central negative conclusion (no cross-sectionally useful ranking signal in this feature set) held up under a real, material data-quality fix, rather than turning out to be an artifact of four corrupted symbols' worth of fake crash days sitting inside a 40-stock panel.
+
+**What this means for numbers cited elsewhere:** `README.md`'s "Key finding so far" section and this file's own "Running Synthesis" (above Experiment 11) both cite Experiment 6b's long/short book (**-0.457% per 5 days, t=-3.12**) as the project's headline ML result. That number describes an earlier, less-rigorous model (Experiment 5's plain absolute-target pooling, AUC-based) and was never re-run against corrected data -- reconstructing its exact throwaway methodology was judged lower-value than re-verifying the project's actual final, more rigorous conclusion (Experiment 10's IC-based test on the fixed-up Experiment 8/9 models), which this entry does. `README.md` has been updated to cite Experiment 10/30's finding instead. The "Running Synthesis" section is left as a historical snapshot (written before Experiments 7-10 existed) rather than rewritten, consistent with this project's practice of appending corrections rather than editing past entries.
+
+---
+
 ## Experiment 11 — Replaying the SPY put credit spread against real expired option prices
 
 **Context:** the project pivoted from predicting SPY direction to selling put credit spreads (defined-risk insurance on a crash), per `OPTIONS_SYSTEM_PLAN.md`. The core empirical question: at each distance below spot and each spread width, did the market pay more than the risk actually delivered? An earlier version of this measurement existed only as a throwaway research script, not committed code, and every number from it was explicitly marked provisional. This entry is the reproduction in real, committed code.

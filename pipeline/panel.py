@@ -129,8 +129,14 @@ def add_news_features(panel_df, news_path='output/data/raw_news.csv'):
 
     # panel_df's index (timestamps from the price data) also needs to be reduced
     # to just the calendar date, so it lines up with news_counts' date-only key.
+    # Price data comes back tz-aware (UTC) while news_counts' timestamp was
+    # deliberately made tz-naive above (ET wall-clock day) -- normalize()
+    # alone zeroes the time-of-day but keeps the UTC tzinfo, which pandas
+    # refuses to merge against a tz-naive column ("cannot merge tz-aware
+    # and tz-naive datetime columns"). tz_localize(None) drops it the same
+    # way the news side already does.
     panel_df = panel_df.reset_index()
-    panel_df['timestamp'] = panel_df['timestamp'].dt.normalize()
+    panel_df['timestamp'] = panel_df['timestamp'].dt.normalize().dt.tz_localize(None)
 
     panel_df = panel_df.merge(news_counts, on=['symbol', 'timestamp'], how='left')
 
