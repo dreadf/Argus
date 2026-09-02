@@ -33,25 +33,11 @@ function metric(label, value, help, cls) {
   return wrap;
 }
 
-// Hierarchy by type and space, not by wrapping every number in its own box
-// (Stripe/Linear pattern: one hero number, everything else a plain
-// label:value pair -- color still reserved for genuine state).
-function heroStat(label, value) {
-  const wrap = el("div", { class: "stat-hero" });
-  wrap.appendChild(el("div", { class: "stat-hero-label", text: label }));
-  wrap.appendChild(el("div", { class: "stat-hero-value", text: value }));
+function kpiTile(label, value, cls) {
+  const wrap = el("div", { class: `kpi-tile${cls ? " " + cls : ""}` });
+  wrap.appendChild(el("div", { class: "kpi-label", text: label }));
+  wrap.appendChild(el("div", { class: `kpi-value${cls ? " " + cls : ""}`, text: value }));
   return wrap;
-}
-
-function statItem(label, value, cls) {
-  const wrap = el("div");
-  wrap.appendChild(el("div", { class: "stat-item-label", text: label }));
-  wrap.appendChild(el("div", { class: `stat-item-value${cls ? " " + cls : ""}`, text: value }));
-  return wrap;
-}
-
-function statRow(items) {
-  return el("div", { class: "stat-row" }, items);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,16 +117,16 @@ function renderAccount(account) {
     return;
   }
   const unrealized = account.positions.reduce((sum, p) => sum + (p.unrealized_pl || 0), 0);
-  box.appendChild(heroStat("Equity", fmtMoney(account.equity)));
-  const items = [
-    statItem("Cash", fmtMoney(account.cash)),
-    statItem("Options buying power", fmtMoney(account.options_buying_power)),
-    statItem("Open positions", String(account.positions.length)),
+  box.appendChild(el("div", { class: "kpi-row" }, [kpiTile("Equity", fmtMoney(account.equity), "accent")]));
+  const rowItems = [
+    metric("Cash", fmtMoney(account.cash)),
+    metric("Options buying power", fmtMoney(account.options_buying_power)),
+    metric("Open positions", String(account.positions.length)),
   ];
   if (account.positions.length > 0) {
-    items.push(statItem("Unrealized P&L", fmtMoney2(unrealized), unrealized >= 0 ? "good" : "bad"));
+    rowItems.push(metric("Unrealized P&L", fmtMoney2(unrealized), null, unrealized >= 0 ? "good" : "bad"));
   }
-  box.appendChild(statRow(items));
+  box.appendChild(el("div", { class: "metric-row" }, rowItems));
 }
 
 function renderMarket(overview) {
@@ -155,10 +141,10 @@ function renderMarket(overview) {
   const m = overview.market;
   const moveBlocks = Math.abs(m.yesterday_move_pct) > 0.02;
   const contangoBlocks = m.contango_threshold !== null && m.contango < m.contango_threshold;
-  box.appendChild(statRow([
-    statItem("SPY spot", fmtMoney2(m.spot)),
-    statItem("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), moveBlocks ? "bad" : null),
-    statItem("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), contangoBlocks ? "bad" : null),
+  box.appendChild(el("div", { class: "metric-row" }, [
+    metric("SPY spot", fmtMoney2(m.spot)),
+    metric("Yesterday's move", fmtPctSigned(m.yesterday_move_pct), "Blocks a new trade above 2%.", moveBlocks ? "bad" : null),
+    metric("Contango (VIX3M/VIX9D)", fmtNum(m.contango, 3), "Flattening below its own 33rd percentile.", contangoBlocks ? "bad" : null),
   ]));
 
   const blocks = [];
@@ -181,7 +167,7 @@ function renderVolatility(overview) {
     return;
   }
   const v = overview.volatility;
-  const eq = el("div", { class: "equation" });
+  const eq = el("div", { class: `equation equation-box ${v.verdict_class}` });
   const item = (label, val) => {
     const wrap = el("span", { class: "eq-item" });
     wrap.appendChild(el("span", { class: "eq-label", text: label }));
@@ -215,9 +201,9 @@ function renderVolForecast(vf) {
   const note = document.getElementById("vol-forecast-note");
   if (!card || !box) return;
   box.innerHTML = "";
-  box.appendChild(statRow([
-    statItem("Forecast vol (annualized)", `${fmtNum(vf.forecast_vol_annualized_pct, 2)}%`),
-    statItem(`Breach prob. (${fmtNum(vf.breach_distance_pct, 0)}% / weekly)`, fmtPct(vf.breach_prob, 2)),
+  box.appendChild(el("div", { class: "metric-row" }, [
+    metric("Forecast vol (annualized)", `${fmtNum(vf.forecast_vol_annualized_pct, 2)}%`),
+    metric(`Breach prob. (${fmtNum(vf.breach_distance_pct, 0)}% / weekly)`, fmtPct(vf.breach_prob, 2)),
   ]));
   if (note) note.textContent = vf.note ? `${vf.note} (data through ${vf.data_through}).` : `Data through ${vf.data_through}.`;
   card.hidden = false;
@@ -244,7 +230,7 @@ function renderPositions(overview, account) {
     return;
   }
   card.hidden = false;
-  card.className = `card ${positions.some((p) => p.room_pct !== null && p.room_pct < 0.02) ? "bad-top" : "accent-top"}`;
+  card.className = `card card-half ${positions.some((p) => p.room_pct !== null && p.room_pct < 0.02) ? "bad-top" : "accent-top"}`;
   const liveBySymbol = {};
   if (account && account.positions) account.positions.forEach((p) => (liveBySymbol[p.symbol] = p));
 
@@ -356,7 +342,7 @@ function renderValidation(tr) {
   const allInside = v.quartiles.every((q) => q.ratio >= v.band[0] && q.ratio <= v.band[1]);
   headline.appendChild(metric("Correlation (real vs. modelled credit)", fmtNum(v.correlation, 3)));
   headline.appendChild(metric("Quartiles inside band", `${v.quartiles.length} of ${v.quartiles.length}`, `Band: ${v.band[0]}-${v.band[1]}`, allInside ? "good" : "bad"));
-  document.getElementById("card-validation").className = `card ${allInside ? "good-top" : "bad-top"}`;
+  document.getElementById("card-validation").className = `card card-half ${allInside ? "good-top" : "bad-top"}`;
 
   table.querySelector("thead").innerHTML = "<tr><th>Quartile</th><th>Weeks</th><th>Mean VIX9D</th><th>Real credit</th><th>Model credit</th><th>Model/real</th></tr>";
   const tbody = table.querySelector("tbody");
@@ -385,7 +371,7 @@ function renderFalseTrip(tr) {
   const ftGood = ft.blocked_pct <= ft.bar;
   headline.appendChild(metric("Blocked (aggregate)", fmtPct(ft.blocked_pct, 1), `Bar: ≤${fmtPct(ft.bar, 0)}`, ftGood ? "good" : "bad"));
   headline.appendChild(metric("Real winning weeks tested", String(ft.n_winners)));
-  document.getElementById("card-false-trip").className = `card ${ftGood ? "good-top" : "bad-top"}`;
+  document.getElementById("card-false-trip").className = `card card-half ${ftGood ? "good-top" : "bad-top"}`;
 
   table.querySelector("thead").innerHTML = "<tr><th>Regime</th><th>Weeks</th><th>Blocked</th><th>Blocked %</th></tr>";
   const tbody = table.querySelector("tbody");

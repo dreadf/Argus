@@ -62,18 +62,25 @@ body {
 .status-line .word.bad { color: var(--bad); }
 .status-line .word.neutral { color: var(--muted); }
 
-/* Hierarchy via type/space, not more boxes: one hero stat, everything else
-   a plain label:value pair separated by whitespace -- borders reserved for
-   card boundaries and genuine alerts, not every number. */
-.stat-hero { margin-bottom: 1.1rem; }
-.stat-hero-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
-.stat-hero-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2.3rem; font-weight: 600; line-height: 1.1; }
-
-.stat-row { display: flex; flex-wrap: wrap; gap: 1.6rem 2rem; }
-.stat-item-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.1rem; }
-.stat-item-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.05rem; font-weight: 500; }
-.stat-item-value.good { color: var(--good); }
-.stat-item-value.bad { color: var(--bad); }
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.kpi-tile {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.kpi-tile.good { border-left-color: var(--good); }
+.kpi-tile.bad { border-left-color: var(--bad); }
+.kpi-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.3rem; }
+.kpi-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.75rem; font-weight: 600; line-height: 1.15; }
+.kpi-value.good { color: var(--good); }
+.kpi-value.bad { color: var(--bad); }
 
 .card-section + .card-section { margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 .card-section-label {
@@ -90,6 +97,15 @@ body {
 }
 
 .equation { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; font-size: 1rem; margin-bottom: 0.5rem; }
+.equation-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+.equation-box.good { border-left-color: var(--good); }
+.equation-box.bad { border-left-color: var(--bad); }
 .equation .eq-item { display: flex; align-items: baseline; gap: 0.35rem; }
 .equation .eq-label { font-size: 0.78rem; color: var(--muted); }
 .equation .eq-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -130,8 +146,13 @@ body {
 .nav-tab:hover { color: var(--text); }
 .nav-tab[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
 
-.tab-panel { display: flex; flex-direction: column; gap: 1rem; }
+/* Closely-related cards sit side by side instead of stacking full-width one
+   after another -- .card-half pairs up on wide screens and drops to a full
+   row on narrow ones. */
+.tab-panel { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; }
 .tab-panel[hidden] { display: none; }
+.tab-panel > .card { flex: 1 1 100%; min-width: 0; }
+.tab-panel > .card.card-half { flex: 1 1 24rem; }
 
 .card {
   background: var(--surface);
