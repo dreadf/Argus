@@ -36,6 +36,15 @@ output/audit/*.jsonl
 !output/data/vix3m.csv
 .vercel
 .env*
+# .env.example is a template with placeholder values only (no secrets --
+# checked its contents before adding this) and scripts/security_preflight.py
+# reads it to know which env var NAMES to scan for. The blanket .env* rule
+# above caught it silently, same failure mode as raw_SPY_long.csv/vix9d.csv/
+# vix3m.csv: a judge's fresh clone had no template to fill in, and
+# security_preflight.py itself crashed with FileNotFoundError. .env and
+# .env.local (real values) correctly stay ignored -- only the template is
+# exempted here.
+!.env.example
 
 # Runtime-generated bot artifacts that predate any rule matching their
 # extension (output/audit/*.jsonl and output/data/*.csv were already
