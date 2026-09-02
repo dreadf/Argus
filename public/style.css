@@ -149,7 +149,7 @@ body {
 /* Closely-related cards sit side by side instead of stacking full-width one
    after another -- .card-half pairs up on wide screens and drops to a full
    row on narrow ones. */
-.tab-panel { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; }
+.tab-panel { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1rem; }
 .tab-panel[hidden] { display: none; }
 .tab-panel > .card { flex: 1 1 100%; min-width: 0; }
 .tab-panel > .card.card-half { flex: 1 1 24rem; }
