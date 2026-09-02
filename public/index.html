@@ -168,55 +168,56 @@
   <section id="tab-how" class="tab-panel" hidden>
     <div class="card">
       <div class="card-title">How it works</div>
-      <div class="card-subtitle">Picker → Guard → Reviewer → order, in order</div>
+      <div class="card-subtitle">One proposal a day moves through five gates in order; Recovery watches the last two continuously</div>
 
-      <div class="pipeline" role="img" aria-label="Pipeline diagram: Picker proposes a trade, Guard checks fifteen hard limits and can block it, Reviewer (an AI) may veto or shrink it, then the Order goes to the broker and Monitor watches it every fifteen minutes. Recovery is a safety net connected to both Order and Monitor.">
-        <div class="pflow">
-          <div class="pflow-main">
-            <div class="pnode">Picker<span>proposes</span></div>
-            <div class="parrow">→</div>
-            <div class="pnode pnode-block">Guard<span>15 hard limits</span></div>
-            <div class="parrow">→</div>
-            <div class="pnode pnode-accent">Reviewer<span>veto / shrink only</span></div>
-            <div class="parrow">→</div>
+      <ol class="stepper" aria-label="Pipeline: Picker, Guard, Reviewer, Order, and Monitor run in order; Recovery watches Order and Monitor continuously.">
+        <li class="step">
+          <div class="step-marker">1</div>
+          <div class="step-body">
+            <div class="step-title">Picker <span class="step-tag">proposes</span></div>
+            <p>Fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</p>
           </div>
-          <div class="pnode-group-wrap">
-            <div class="pnode-group">
-              <div class="pnode">Order<span>to broker</span></div>
-              <div class="parrow">→</div>
-              <div class="pnode">Monitor<span>every 15 min</span></div>
+        </li>
+        <li class="step">
+          <div class="step-marker bad">2</div>
+          <div class="step-body">
+            <div class="step-title">Guard <span class="step-tag">15 hard limits</span></div>
+            <p>15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</p>
+          </div>
+        </li>
+        <li class="step">
+          <div class="step-marker accent">3</div>
+          <div class="step-body">
+            <div class="step-title">
+              Reviewer <span class="step-tag">veto / shrink only</span>
+              <button class="info-btn" type="button" aria-label="More about the Reviewer">?</button>
+              <span class="info-tip" role="tooltip">Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</span>
             </div>
-            <div class="pbracket"></div>
-            <div class="pnode pnode-block precovery">Recovery<span>watches both</span></div>
+            <p>An AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt.</p>
           </div>
-        </div>
-      </div>
-
-      <div class="stage-list">
-        <div class="stage-card">
-          <div class="stage-name">1. Picker</div>
-          <p>Fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.</p>
-        </div>
-        <div class="stage-card bad">
-          <div class="stage-name">2. Guard</div>
-          <p>15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream.</p>
-        </div>
-        <div class="stage-card accent">
-          <div class="stage-name">3. Reviewer
-            <button class="info-btn" type="button" aria-label="More about the Reviewer">?</button>
-            <span class="info-tip" role="tooltip">Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.</span>
+        </li>
+        <li class="step">
+          <div class="step-marker">4</div>
+          <div class="step-body">
+            <div class="step-title">Order <span class="step-tag">to broker</span></div>
+            <p>Sent to the broker as a single two-legged order once both Guard and Reviewer have cleared it.</p>
           </div>
-          <p>An AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt.</p>
-        </div>
-        <div class="stage-card">
-          <div class="stage-name">4. Monitor</div>
-          <p>Every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</p>
-        </div>
-        <div class="stage-card bad">
-          <div class="stage-name">5. Recovery</div>
-          <p>An unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</p>
-        </div>
-      </div>
+        </li>
+        <li class="step">
+          <div class="step-marker">5</div>
+          <div class="step-body">
+            <div class="step-title">Monitor <span class="step-tag">every 15 min</span></div>
+            <p>Every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.</p>
+          </div>
+        </li>
+        <li class="step step-parallel">
+          <div class="step-marker bad">↺</div>
+          <div class="step-body">
+            <div class="step-title">Recovery <span class="step-tag">runs alongside Order &amp; Monitor</span></div>
+            <p>An unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.</p>
+          </div>
+        </li>
+      </ol>
 
       <p class="card-note">The AI is deliberately the least-trusted component here: it sits after every hard limit has already passed, and the only actions it's structurally capable of are subtracting risk or refusing. Enforced by <code>apply_reviewer_decision</code>, not by asking the prompt nicely.</p>
       <p class="card-note">Full design rationale: <code>OPTIONS_SYSTEM_PLAN.md</code>. Full experiment log, including two retracted findings: <code>EXPERIMENT.md</code>.</p>

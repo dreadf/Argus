@@ -341,75 +341,49 @@ summary:hover { text-decoration: underline; }
 
 .chart-wrap { position: relative; height: 18rem; margin-bottom: 0.6rem; }
 
-.pipeline { margin: 1rem 0 0; overflow-x: auto; }
-.pflow { display: flex; align-items: flex-start; gap: 0.4rem; min-width: max-content; }
-.pflow-main { display: flex; align-items: center; gap: 0.4rem; }
-.pnode {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 6.5rem;
-}
-.pnode span { font-size: 0.72rem; font-weight: 400; color: var(--muted); }
-.pnode-block { border-color: var(--bad); color: var(--bad); }
-.pnode-block span { color: var(--muted); }
-.pnode-accent { border-color: var(--accent); color: var(--accent); }
-.pnode-accent span { color: var(--muted); }
-.parrow { color: var(--muted-dim); align-self: center; font-size: 1.1rem; }
-
-.pnode-group-wrap { display: flex; flex-direction: column; }
-.pnode-group { display: flex; gap: 0.4rem; }
-.pbracket {
-  height: 1rem;
-  margin: 0 1.6rem;
-  border-left: 1px solid var(--bad);
-  border-right: 1px solid var(--bad);
-  border-bottom: 1px solid var(--bad);
-  border-radius: 0 0 6px 6px;
-  position: relative;
-}
-.pbracket::after {
+/* Vertical stepper -- the diagram and the detail are the same list, so they
+   can't drift apart (a horizontal boxes-and-arrows diagram plus a separate
+   card grid had grown out of sync: Order had no card at all). Pattern is
+   the common "numbered steps with a connecting line" convention used for
+   onboarding/order-tracking flows; a dashed connector marks Recovery as
+   running alongside the last two steps rather than after them. */
+.stepper { list-style: none; margin: 1.2rem 0 0; padding: 0; }
+.step { position: relative; display: flex; gap: 1rem; padding-bottom: 1.5rem; }
+.step:last-child { padding-bottom: 0; }
+.step:not(:last-child)::before {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: -0.7rem;
+  left: 1.05rem;
+  top: 2.3rem;
+  bottom: -0.3rem;
   width: 1px;
-  height: 0.7rem;
-  background: var(--bad);
+  background: var(--border);
   transform: translateX(-50%);
 }
-.precovery { margin-top: 1.6rem; }
-
-.stage-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.8rem;
-  margin-top: 1.4rem;
-}
-.stage-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
-}
-.stage-card.bad { border-left-color: var(--bad); }
-.stage-card.accent { border-left-color: var(--accent); }
-.stage-name {
+.step:has(+ .step-parallel)::before { background: none; border-left: 1px dashed var(--bad); width: 0; }
+.step-marker {
   position: relative;
-  font-weight: 600;
-  margin-bottom: 0.3rem;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
 }
-.stage-card p { font-size: 0.86rem; color: var(--text-dim); margin: 0; line-height: 1.5; }
+.step-marker.bad { border-color: var(--bad); color: var(--bad); }
+.step-marker.accent { border-color: var(--accent); color: var(--accent); }
+.step-body { flex: 1; min-width: 0; padding-top: 0.2rem; }
+.step-title { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-weight: 600; margin-bottom: 0.3rem; }
+.step-tag { font-family: var(--font-mono); font-size: 0.74rem; font-weight: 400; color: var(--muted); }
+.step-body p { margin: 0; font-size: 0.9rem; color: var(--text-dim); line-height: 1.55; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
