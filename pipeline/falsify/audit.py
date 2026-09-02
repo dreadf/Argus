@@ -20,15 +20,12 @@ No network, no credentials needed -- reads only the already-fetched
 output/data/raw_SPY_long.csv, output/data/vix9d.csv, output/data/vix3m.csv
 (same inputs pipeline.backtest.reconstruct.replay() already uses).
 
-REPRODUCIBILITY CAVEAT (found and fixed in .gitignore, but the fix still
-needs a commit -- see EXPERIMENT_29_SHARPE_AUDIT.md): those three files
-were NOT committed to git as of 2026-09-02 (`.gitignore`'s blanket
-`output/data/*.csv` rule caught them silently). This command only runs
-clean on a machine where they'd already been fetched; a fresh clone gets
-FileNotFoundError instead. `.gitignore` now allow-lists them, but they
-still need `git add` + a commit before this file's "no network, no
-credentials" claim is true for anyone else. This affects reconstruct.py's
-and vrp_measure.py's own __main__s identically -- not unique to this file.
+REPRODUCIBILITY CAVEAT, RESOLVED 2026-09-02: those three files were not
+committed to git as of earlier that day (.gitignore's blanket
+`output/data/*.csv` rule caught them silently); a fresh clone would have
+hit FileNotFoundError. Fixed in commit 2f09aad -- .gitignore allow-lists
+them and they are now tracked. This affected reconstruct.py's and
+vrp_measure.py's own __main__s identically, not just this file.
 
 Every random component is SEEDED so output is byte-stable across runs:
 seed 42 for the Sharpe bootstrap (IID and block), matching the seed this
@@ -49,6 +46,7 @@ from pipeline.backtest.reconstruct import (
     replay,
 )
 from pipeline.falsify.deflated_sharpe import (
+    _skew_kurtosis,
     bootstrap_sharpe_se,
     deflated_sharpe_curve,
     deflated_sharpe_ratio,
@@ -156,6 +154,59 @@ def run_audit() -> dict:
         mppm_levered = {"error": str(e)}
     mppm_spy = mppm_sweep(spy_returns, CASH_WEEKLY, dt=1 / WEEKS_PER_YEAR)
 
+    # Filtered-vs-unfiltered RAW SHARPE at variant C's basis (2-concurrent,
+    # the convention README's headline actually cites) -- NOT the same thing
+    # as mppm_filtered/mppm_unfiltered above, which are variant B (single
+    # position). Added after this exact comparison was drafted from memory
+    # into README replacement prose instead of being computed (the "0.49"
+    # error, corrected 2026-09-02) -- this is the fix: make it a permanent,
+    # reproducible section instead of an ad hoc check that has to be redone
+    # correctly by hand every time someone wants to cite it.
+    unfiltered_c = compute_variant(result, unfiltered_traded, n_concurrent=2, label="C unfiltered")
+    filtered_vs_unfiltered_c = {
+        "filtered_sharpe": variant_c["sharpe"],
+        "unfiltered_sharpe": unfiltered_c["sharpe"],
+        "filtered_return": variant_c["annualized_return"],
+        "unfiltered_return": unfiltered_c["annualized_return"],
+        "filtered_vol": variant_c["annualized_vol"],
+        "unfiltered_vol": unfiltered_c["annualized_vol"],
+        "filtered_max_drawdown": variant_c["max_drawdown"],
+        "unfiltered_max_drawdown": unfiltered_c["max_drawdown"],
+    }
+
+    # Distribution shape (H-A) and monthly/quarterly aggregation (H-B) --
+    # both were previously computed only in an ad hoc one-liner and quoted
+    # in the writeup from memory of that run, never re-derived from a
+    # permanent, tested source. Added for the same reason as
+    # filtered_vs_unfiltered_c/ex2018 above.
+    g3, g4 = _skew_kurtosis(excess)
+    distribution_shape = {"skew": g3, "kurtosis": g4}
+
+    wr_dated = wr.copy()
+    wr_dated.index = result["entry"]
+    aggregation_levels = {}
+    for label, rule, periods_per_year in (("weekly", None, WEEKS_PER_YEAR), ("monthly", "ME", 12), ("quarterly", "QE", 4)):
+        agg = wr_dated if rule is None else (1 + wr_dated).resample(rule).prod() - 1
+        rf = CASH_ANNUAL_RATE / periods_per_year
+        ex = agg - rf
+        ag3, ag4 = _skew_kurtosis(ex)
+        d = deflated_sharpe_ratio(agg, n_trials=N_TRIALS_HEADLINE, risk_free_per_period=rf)
+        aggregation_levels[label] = {"n_periods": len(agg), "skew": ag3, "kurtosis": ag4, "dsr_n30": d["dsr"]}
+
+    # Ex-2018 breakdown (variant C basis) -- EXPERIMENT.md 12d and README
+    # both make a claim about the filter's benefit being concentrated in
+    # 2018; this is the reproducible version of that check, not a number
+    # typed from an earlier, pre-collateral-fix run.
+    not_2018 = result["entry"].dt.year != 2018
+    result_ex2018 = result[not_2018].reset_index(drop=True)
+    traded_ex2018 = traded[not_2018].reset_index(drop=True)
+    unfiltered_ex2018 = unfiltered_traded[not_2018].reset_index(drop=True)
+    ex2018 = {
+        "n_weeks": int(not_2018.sum()),
+        "filtered": compute_variant(result_ex2018, traded_ex2018, n_concurrent=2, label="C filtered ex-2018"),
+        "unfiltered": compute_variant(result_ex2018, unfiltered_ex2018, n_concurrent=2, label="C unfiltered ex-2018"),
+    }
+
     return {
         "variant_b": variant_b,
         "variant_c": variant_c,
@@ -170,6 +221,10 @@ def run_audit() -> dict:
         "risk_match_leverage": risk_match_leverage,
         "mppm_levered_at_risk_match": mppm_levered,
         "mppm_spy_buy_and_hold": mppm_spy,
+        "filtered_vs_unfiltered_c": filtered_vs_unfiltered_c,
+        "ex2018": ex2018,
+        "distribution_shape": distribution_shape,
+        "aggregation_levels": aggregation_levels,
     }
 
 
@@ -186,9 +241,20 @@ def _print_report(r: dict) -> None:
     print(f"MinTRL: {r['mintrl_weeks']:.0f} weeks ({r['mintrl_years']:.1f} years) needed "
           f"vs {r['years_available']:.1f} years available")
     print()
+    ds = r["distribution_shape"]
+    print(f"Distribution shape (variant B, weekly excess returns): skew={ds['skew']:+.2f}  kurtosis={ds['kurtosis']:.1f}")
+    print()
     print(f"Bootstrap SE (variant B, seed={BOOTSTRAP_SEED}, n={BOOTSTRAP_N_RESAMPLES}):")
-    print(f"    IID:   se={r['bootstrap_iid']['se']:.5f}  P(SR<=0)={r['bootstrap_iid']['p_sr_le_zero']:.4f}")
-    print(f"    block: se={r['bootstrap_block']['se']:.5f}  P(SR<=0)={r['bootstrap_block']['p_sr_le_zero']:.4f}")
+    iid, block = r["bootstrap_iid"], r["bootstrap_block"]
+    iid_ci_ann = (iid["ci_low"] * math.sqrt(WEEKS_PER_YEAR), iid["ci_high"] * math.sqrt(WEEKS_PER_YEAR))
+    print(f"    IID:   se={iid['se']:.5f}  P(SR<=0)={iid['p_sr_le_zero']:.4f}  "
+          f"95% CI (annualized Sharpe)=[{iid_ci_ann[0]:+.4f}, {iid_ci_ann[1]:+.4f}]")
+    print(f"    block: se={block['se']:.5f}  P(SR<=0)={block['p_sr_le_zero']:.4f}")
+    print()
+    print("Monthly/quarterly aggregation (H-B -- does the CLT tame the fat tails?):")
+    for label, agg in r["aggregation_levels"].items():
+        print(f"    {label:10s} n={agg['n_periods']:4d}  skew={agg['skew']:+6.2f}  "
+              f"kurtosis={agg['kurtosis']:7.1f}  DSR(N={N_TRIALS_HEADLINE})={agg['dsr_n30']:.4f}")
     print()
     print("MPPM (variant B, annualized certainty-equivalent excess return):")
     for rho in r["mppm_filtered"]:
@@ -202,6 +268,21 @@ def _print_report(r: dict) -> None:
         for rho in r["mppm_levered_at_risk_match"]:
             print(f"    rho={rho:.0f}  levered_strategy={r['mppm_levered_at_risk_match'][rho]:+.4%}  "
                   f"SPY_buy_and_hold={r['mppm_spy_buy_and_hold'][rho]:+.4%}")
+    print()
+    fu = r["filtered_vs_unfiltered_c"]
+    dd_ratio = fu["unfiltered_max_drawdown"] / fu["filtered_max_drawdown"]
+    print(f"Filtered vs unfiltered, RAW SHARPE (variant C basis -- the one README cites):")
+    print(f"    filtered:   Sharpe={fu['filtered_sharpe']:+.3f}  return={fu['filtered_return']:.4%}  "
+          f"vol={fu['filtered_vol']:.4%}  maxDD={fu['filtered_max_drawdown']:.2%}")
+    print(f"    unfiltered: Sharpe={fu['unfiltered_sharpe']:+.3f}  return={fu['unfiltered_return']:.4%}  "
+          f"vol={fu['unfiltered_vol']:.4%}  maxDD={fu['unfiltered_max_drawdown']:.2%}")
+    print(f"    return cost of filtering: {fu['unfiltered_return']-fu['filtered_return']:+.4%}   "
+          f"drawdown ratio (unfiltered/filtered): {dd_ratio:.2f}x")
+    print()
+    ex = r["ex2018"]
+    print(f"Ex-2018 (variant C basis, {ex['n_weeks']} weeks):")
+    print(f"    filtered:   Sharpe={ex['filtered']['sharpe']:+.3f}")
+    print(f"    unfiltered: Sharpe={ex['unfiltered']['sharpe']:+.3f}")
 
 
 if __name__ == "__main__":

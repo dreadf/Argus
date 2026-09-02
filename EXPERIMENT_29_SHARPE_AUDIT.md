@@ -15,10 +15,10 @@ figures and the code's output ever disagree -- see "Reproducibility" at the bott
 
 ## The question
 
-`README.md` states this strategy's Sharpe as 0.35 (vs SPY's 0.66), but no code in the
-repo computed it -- `EXPERIMENT.md`'s only Sharpe table (Experiment 12d) uses a superseded
-strike rule and different figures (0.03/0.17). This experiment builds the missing
-computation, using [Bailey & López de Prado's Deflated Sharpe Ratio](https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf)
+`README.md` stated this strategy's Sharpe as 0.35 (vs SPY's 0.66) before this experiment
+ran, but no code in the repo computed it -- `EXPERIMENT.md`'s only Sharpe table (Experiment
+12d) uses a superseded strike rule and different figures (0.03/0.17). This experiment
+builds the missing computation, using [Bailey & López de Prado's Deflated Sharpe Ratio](https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf)
 (DSR) to ask the harder question underneath "what's the Sharpe": given that **30 things
 have been tried** against this data (`EXPERIMENT.md`'s own numbered ledger), how much of
 any headline number is just having looked 30 times?
@@ -87,10 +87,14 @@ per-trade cap" (`reconstruct.replay()` structurally never holds two overlapping
 positions, so this scales the effective cap to `CRASH_DAY_BUDGET_PCT` = 6% rather than
 truly staggering entries -- the exact staggering isn't specified anywhere in the repo, and
 reconstructing it exactly would mean guessing a convention to match a target number).
-**Even so, it independently corroborates the repo's own published figures**: vol 3.25%
-vs `EXPERIMENT.md` 12d's 3.27%, max drawdown 5.91% vs README's 5.8%. The earlier
-conclusion that README's number was "unreproducible" was wrong -- it substantially
-reproduces once the collateral convention is fixed.
+**Even so, it independently corroborates `EXPERIMENT.md` 12d's published figures**: vol
+3.25% vs 12d's 3.27%, max drawdown 5.91% (rounds to README's now-current "5.9%" -- README
+has since been updated to state the figures in this document directly, so this is no
+longer an independent cross-check against README, only against 12d). The earlier
+conclusion that the pre-audit README number was "unreproducible" was wrong -- it
+substantially reproduced once the collateral convention was fixed, and README's Sharpe/
+DSR section now states this document's own corrected numbers rather than the original,
+unreproducible ones.
 
 **Every published DSR must be quoted with its N, never as a bare number** (an entire
 statistic that exists to make selection bias visible would defeat itself if the N behind
@@ -149,6 +153,36 @@ had to overrule it. So: usable as a disclosure and multiple-testing instrument, 
 as a curve with the bootstrap SE alongside it; **not** usable as a precision probability,
 and never usable alone to support a positive claim at this kurtosis.
 
+## Filtered vs unfiltered, and ex-2018 -- corrected after a real drafting error
+
+**Reported here after catching a mistake, not before.** An earlier draft of this project's
+README replacement text stated the unfiltered Sharpe as 0.49 without actually computing
+it. It was wrong -- flagged by a peer session's review before it shipped, then verified
+and corrected the same day. The true, computed figures (variant C basis: 2 concurrent
+positions, 6% effective cap):
+
+| | Sharpe | annual return | vol | max drawdown |
+|---|---|---|---|---|
+| Filtered | **+0.563** | 4.83% | 3.25% | 5.91% |
+| Unfiltered (trade every week) | **+0.350** | 5.42% | 6.94% | 17.59% |
+
+Filtering costs about 0.6 percentage points of return in exchange for roughly half the
+volatility and a **~3×** smaller drawdown (not 4×, the other number that draft got wrong).
+
+**Ex-2018** (487 of 538 weeks): filtered Sharpe **0.594**, unfiltered **0.603** --
+essentially identical. Outside 2018, the filter is a wash: it neither helps nor
+meaningfully hurts. Nearly all of its value comes from that single year, which is exactly
+what a tail hedge looks like and is independently consistent with `EXPERIMENT.md` 12d's
+own finding that the filter's benefit concentrates in 2018 (and 2020). Excluding a
+strategy's worst year is a diagnostic about *where the value comes from*, not a reason to
+drop the protection -- but it does mean this project has exactly one full observation of
+the event the filter exists for.
+
+Both comparisons are now permanent, reproducible sections of `python -m
+pipeline.falsify.audit` (`filtered_vs_unfiltered_c`, `ex2018`), gated by
+`tests/test_audit.py`, specifically so this exact mistake -- a plausible-sounding number
+substituted for a computed one -- cannot recur silently.
+
 ## Minimum Track Record Length
 
 [Bailey & López de Prado (2012)](https://www.davidhbailey.com/dhbpapers/sharpe-frontier.pdf)'s
@@ -187,7 +221,12 @@ That gap is now closed:
 
 - `python -m pipeline.falsify.audit` -- reproduces every figure in this document, seeded
   (bootstrap seed 42), no credentials or network, confirmed **byte-identical across two
-  consecutive runs**.
+  consecutive runs**. This includes the distribution-shape (skew/kurtosis), the bootstrap
+  95% confidence interval, and the H-B monthly/quarterly aggregation table -- all three
+  were computed correctly the first time but only existed as prose until a
+  second full pass (2026-09-03) checked every remaining number against a permanent source
+  and found they weren't gated by any test yet, the same gap that let the 0.49 error
+  through on a different number in this document.
 - `pytest tests/ -m slow` -- asserts the audit's live output against the exact figures
   published here (`tests/test_audit.py`); excluded from the default `pytest tests/` run
   only because `reconstruct.calibrate_skew_multiplier`'s pre-existing grid search alone

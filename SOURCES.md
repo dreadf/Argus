@@ -185,3 +185,87 @@ the citations "should have" worked.
   Econometrica.** Block-bootstrap elimination procedure for comparing
   multiple forecasts at once without inflating false-positive risk from
   repeated pairwise tests. Used in Experiments 14/18/22.
+
+## Performance measurement / Sharpe ratio audit (Experiment 29)
+
+- **Bailey, D. & López de Prado, M. (2014), "The Deflated Sharpe Ratio:
+  Correcting for Selection Bias, Backtest Overfitting, and Non-Normality,"
+  Journal of Portfolio Management.**
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551 ,
+  https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf
+  Basis for `pipeline/falsify/deflated_sharpe.py`'s DSR: corrects a Sharpe
+  ratio for the number of trials tried (this project's own numbered
+  `EXPERIMENT.md` ledger supplies a truthful N) and for non-normal
+  (skewed/fat-tailed) returns, which weekly options P&L is not exempt from.
+  Result: DSR ≈ 0.20 at N=30 -- not statistically distinguishable from a
+  lucky draw among 30 tries.
+
+- **Bailey, D. & López de Prado, M. (2012), "The Sharpe Ratio Efficient
+  Frontier."** https://www.davidhbailey.com/dhbpapers/sharpe-frontier.pdf
+  Source of the Probabilistic Sharpe Ratio and Minimum Track Record Length
+  (MinTRL), both implemented in `deflated_sharpe.py`. MinTRL result: ~932
+  weeks (17.9 years) of data would be needed to prove this strategy's
+  Sharpe exceeds zero at 95% confidence, against 10.3 years available --
+  a direct consequence of the strategy's own extreme negative skew and
+  kurtosis (an insurance-shaped payoff is inherently hard to prove with a
+  ratio built for symmetric returns).
+
+- **Goetzmann, W., Ingersoll, J., Spiegel, M. & Welch, I. (2007),
+  "Portfolio Performance Manipulation and Manipulation-Proof Performance
+  Measures," Review of Financial Studies.**
+  https://www.ivo-welch.info/research/journalcopy/2007-rfs.pdf
+  Proves Sharpe-like measures are gameable by option-like payoffs almost by
+  construction, and derives the Manipulation-Proof Performance Measure
+  (MPPM) as the alternative that isn't -- basis for `pipeline/falsify/
+  mppm.py`. Used as an independent, non-gameable cross-check on this
+  project's own DSR result: MPPM (+0.87%/yr, stable across risk aversion
+  2-5) independently reproduces `EXPERIMENT.md` 12d's "insurance, not an
+  edge" finding for the term-structure filter, and shows the strategy
+  loses to plain SPY buy-and-hold once risk-matched to the same volatility.
+
+- **Cboe S&P 500 PutWrite Indices Methodology.**
+  https://cdn.cboe.com/api/global/us_indices/governance/Cboe_SP_500_PutWrite_Indices_Methodology.pdf
+  The reference convention this project adopted for how uninvested
+  collateral is treated in a return series: "fully collateralized," with
+  the collateral "invested at the 1- and 3-month Treasury Bill rate" every
+  day, traded or not. Fixed a real bug in `pipeline/falsify/equity_sim.py`
+  (collateral credited zero interest on traded weeks while the Sharpe
+  benchmark still assumed it earned the full rate -- see
+  `EXPERIMENT_29_SHARPE_AUDIT.md` for the full account) and is now that
+  module's pinned, documented convention.
+
+- **"Life at Sharpe's End"** (notional funding and the Sharpe-ratio
+  denominator ambiguity in derivatives strategies).
+  https://www.premiacap.com/publications/RR_0901.pdf
+  Names the general failure mode Experiment 29's bug turned out to be an
+  instance of: a strategy's stated return depends entirely on what capital
+  base you assume it's funded against, and that assumption is a choice,
+  not a fact -- "returns can be arbitrarily restated to any number of
+  levels."
+
+- **Israelov, R. & Tummala, H., "Which Index Options Should You Sell?"**
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2990542 , and
+  **Israelov, R. & Nielsen, L., "Covered Calls Uncovered," Financial
+  Analysts Journal (2015).**
+  https://www.aqr.com/-/media/AQR/Documents/Insights/Journal-Article/Covered-Calls-Uncovered.pdf
+  Background on index option-selling return decomposition and risk
+  attribution; context for interpreting this strategy's own volatility
+  risk premium harvest.
+
+- **Israelov, R., "Pathetic Protection," Journal of Alternative Investments
+  (2019).**
+  https://images.aqr.com/-/media/AQR/Documents/Journal-Articles/Pathetic-Protection-JAI-Wint19.pdf
+  On tail-hedge cost and the standalone-Sharpe trap of judging insurance-shaped
+  payoffs by ordinary risk-adjusted metrics -- same underlying issue
+  Experiment 29's MinTRL section surfaces on the short side of this
+  strategy's payoff.
+
+- **Lo, A. (2002), "The Statistics of Sharpe Ratios," Financial Analysts
+  Journal.** Standard error of the Sharpe ratio estimator under non-IID,
+  non-normal returns (the Mertens 2002 correction `sharpe_se()` implements
+  is the direct descendant of this result).
+
+- **Pezier, J. & White, A. (2006), Adjusted Sharpe Ratio.** Penalizes
+  negative skewness and excess kurtosis directly; cited as further context
+  for why plain Sharpe misprices a strategy shaped like this one, alongside
+  the DSR and MPPM approaches actually implemented here.

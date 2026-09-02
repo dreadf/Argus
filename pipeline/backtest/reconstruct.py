@@ -64,7 +64,7 @@ def spread_value(spot: float, short_k: float, long_k: float, tau_years: float, s
     long_k) -- the fee this system collects, priced under a given
     volatility input. Used with the k(vol)-adjusted VIX9D input for the
     reconstruction's implied-vol side, and with trailing realized SPY
-    volatility for Experiment 21's vrp_edge measure below: same closed
+    volatility for Experiment 28's vrp_edge measure below: same closed
     form, only sigma differs, so the two sides can never drift apart on
     anything but volatility itself."""
     return bs_put(spot, short_k, tau_years, sigma) - bs_put(spot, long_k, tau_years, sigma)
@@ -166,7 +166,7 @@ def replay(a: float, b: float, distance: float = 0.03, width: float = 5.0,
     Every loss in the output is real; only the credit column is modelled
     before Feb 2024.
 
-    Also reports vrp_edge (Experiment 21): the same spread priced a
+    Also reports vrp_edge (Experiment 28): the same spread priced a
     second time with trailing realized SPY volatility instead of the
     VIX9D-derived implied input, via the identical spread_value() closed
     form. This system is a net SELLER -- it collects `credit` (the

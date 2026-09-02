@@ -6,3 +6,16 @@ dependencies = []
 
 [tool.vercel]
 entrypoint = "api.account:handler"
+
+[tool.pytest.ini_options]
+# "slow" marker: excluded by default (addopts below) so `pytest tests/`
+# stays fast (repo convention, G1: 0 failures/skips, < 10s). Added because
+# tests/test_audit.py reproduces pipeline/falsify/audit.py's numbers
+# end to end, which calls reconstruct.calibrate_skew_multiplier's grid
+# search (~13s, pre-existing, not this addition's doing) -- run those
+# explicitly with `python -m pytest tests/ -m slow -v`, and read
+# pipeline/falsify/audit.py's own module docstring for the single command
+# (`python -m pipeline.falsify.audit`) that reproduces every figure in
+# EXPERIMENT_29_SHARPE_AUDIT.md by itself, no pytest needed.
+markers = ["slow: reproduces published figures end-to-end; excluded from the default run, see comment above"]
+addopts = "-m 'not slow'"
