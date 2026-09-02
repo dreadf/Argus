@@ -8,6 +8,10 @@ Full research plan and philosophy (archived, superseded by `VOLATILITY_ML_PLAN.m
 Full experiment log (what was tried, why, results, interpretation): [`EXPERIMENT.md`](EXPERIMENT.md).
 Trading-system foundation (archived, superseded by `OPTIONS_SYSTEM_PLAN.md`): [`archive/TRADING_SYSTEM_PLAN.md`](archive/TRADING_SYSTEM_PLAN.md).
 
+## Live dashboard
+
+**[stock-ten-orcin.vercel.app](https://stock-ten-orcin.vercel.app)** — read-only, live from the real paper account. It's read-only by design: a public URL that could also trigger real trades would let anyone who finds the link act on a real brokerage account. Pause/resume, force-close, and on-demand runs exist too, but only in a local admin console (`CONTROLS_ENABLED=true`, `streamlit run pipeline/ui/app.py`) that never gets deployed publicly.
+
 ## Key finding so far
 
 Across a naive baseline, Logistic Regression, XGBoost, single-symbol feature ablation, a multi-symbol generalization check, a 40-stock pooled panel model, and a panel diagnostic pass, **no feature combination tested shows a robust, cross-stock predictive edge** for 5-day direction. Three results are worth singling out:
@@ -26,7 +30,13 @@ The machine-learning experiments in this repo are **not** part of the trading sy
 
 ## What it returns, stated up front
 
-**About 4.4% a year on the account, roughly 1.4% above cash, with a 5.8% worst drawdown.** SPY buy-and-hold returned 14.6% a year over the same period, with a 34.2% drawdown. Risk-adjusted, that is a Sharpe of 0.35 against SPY's 0.66: **about half the risk-adjusted return of simply holding the index, bought with a drawdown six times shallower.**
+About 4.8% a year on the account, with a 5.9% worst drawdown. SPY buy-and-hold returned about 15.0% a year over the same period, with a 32.1% drawdown. Risk-adjusted, that is a Sharpe of 0.56 against SPY's 0.69, roughly 80% of the index's risk-adjusted return, at a sixth of its drawdown. But risk-adjusted comparisons like this one are exactly what this project's own audit (Experiment 29) found reason to distrust: correcting for the 30 things tried against this data (the project's full [`EXPERIMENT.md`](EXPERIMENT.md) ledger), that 0.56 Sharpe is not statistically distinguishable from the best of 30 lucky tries (Deflated Sharpe Ratio = 0.20 at N=30). We are publishing that correction rather than the bare number, because a number nobody has stress-tested against how many times it was allowed to be wrong is not a number worth leading with.
+
+| Trials tested (N) | 1 | 5 | 10 | 30 | 100 |
+|---|---|---|---|---|---|
+| Deflated Sharpe Ratio | 0.894 | 0.523 | 0.372 | 0.205 | 0.100 |
+
+N=30 is this project's actual trial count as of today; it will rise again once further hypotheses are tested, so treat a bare "DSR=0.2" as dated the moment that happens. Full derivation, reproducible with no credentials or network in about 17 seconds (`python -m pipeline.falsify.audit`): [`EXPERIMENT_29_SHARPE_AUDIT.md`](EXPERIMENT_29_SHARPE_AUDIT.md).
 
 This strategy is not designed to beat the market. It is sized so that it cannot blow up, and that same sizing is why it earns little. We would rather lead with those numbers than have you find them.
 
@@ -40,7 +50,9 @@ Testing further back required knowing what the fee would have been. The answer w
 
 The fix came from published research on volatility selling: when the VIX curve flattens or inverts, meaning the market expects more turbulence soon than later, stop selling. Skipping the worst third of weeks by that measure turned 2018 from a large loss into a small profit and **cut the worst drawdown by 77%**, at every distance, width, and cost level we tried.
 
-**Then we tried to break that result.** Measured properly, with skipped weeks earning cash, the filter costs **0.53 percentage points of annual return** and buys half the volatility, a four-times smaller drawdown, and a Sharpe of 0.35 against 0.24. That is a good trade.
+**Then we tried to break that result, twice.** First, measured with skipped weeks earning cash instead of zero, the term-structure filter costs about 0.6 percentage points of annual return in exchange for roughly half the volatility and a 4x smaller drawdown, a Sharpe of 0.56 against 0.49 unfiltered. Second, and more decisively: a performance measure specifically designed to **not** be gameable by option-selling payoffs (the manipulation-proof measure of Goetzmann, Ingersoll, Spiegel & Welch, 2007 — ordinary Sharpe ratios are provably gameable by exactly this shape of strategy) reaches the same conclusion independently: the filter costs return relative to trading every week. Two different methods agreeing that this is insurance, not an edge, is stronger evidence than either alone. See [`EXPERIMENT_29_SHARPE_AUDIT.md`](EXPERIMENT_29_SHARPE_AUDIT.md).
+
+**Third, and this is the finding we did not expect going in:** risk-matched to SPY's own volatility (levering the strategy roughly 11x to get there), the same non-gameable measure says it loses to plain SPY buy-and-hold at every level of risk aversion tested. The strategy's real value is not "beats the index" — it never claimed that at this size — it is a much smaller, much shallower ride to a smaller number, which is a legitimate thing to want but a different claim than a Sharpe ratio by itself communicates. We would rather say that once than let the Sharpe number say it for us.
 
 Two caveats we would rather state than have you find:
 
