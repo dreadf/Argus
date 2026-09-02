@@ -19,9 +19,11 @@ figures and the code's output ever disagree -- see "Reproducibility" at the bott
 ran, but no code in the repo computed it -- `EXPERIMENT.md`'s only Sharpe table (Experiment
 12d) uses a superseded strike rule and different figures (0.03/0.17). This experiment
 builds the missing computation, using [Bailey & López de Prado's Deflated Sharpe Ratio](https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf)
-(DSR) to ask the harder question underneath "what's the Sharpe": given that **30 things
-have been tried** against this data (`EXPERIMENT.md`'s own numbered ledger), how much of
-any headline number is just having looked 30 times?
+(DSR) to ask the harder question underneath "what's the Sharpe": given that **31 things
+have been tried** against this data (`EXPERIMENT.md`'s own numbered ledger, current as of
+Experiment 30 -- N was 30 when this section was first written, and rose the same week; see
+the "Trial-count rule" section below for exactly why that happened and what does and
+doesn't count), how much of any headline number is just having looked 31 times?
 
 ## What this measurement actually is
 
@@ -77,10 +79,13 @@ the correct convention, excess Sharpe stays within a **0.10 band** across cash r
 
 ## Corrected result
 
-| | annual return | vol | Sharpe | max drawdown | PSR (N=1) | DSR (N=30) |
+| | annual return | vol | Sharpe | max drawdown | PSR (N=1) | DSR (N=31) |
 |---|---|---|---|---|---|---|
-| **B — single position, 3% cap** | 3.89% | 1.56% | **+0.574** | 2.89% | **0.894** | **0.205** |
-| **C — 2 concurrent, 6% cap** | 4.83% | 3.25% | +0.563 | 5.91% | 0.891 | 0.200 |
+| **B — single position, 3% cap** | 3.89% | 1.56% | **+0.574** | 2.89% | **0.894** | **0.201** |
+| **C — 2 concurrent, 6% cap** | 4.83% | 3.25% | +0.563 | 5.91% | 0.891 | 0.197 |
+
+(N=31, current as of Experiment 30 -- these were 0.205/0.200 at N=30 when first computed;
+see "Trial-count rule" below for why N moved.)
 
 Variant C is a coarse proxy for `EXPERIMENT.md`:481's "2 concurrent positions at the 3%
 per-trade cap" (`reconstruct.replay()` structurally never holds two overlapping
@@ -98,7 +103,10 @@ unreproducible ones.
 
 **Every published DSR must be quoted with its N, never as a bare number** (an entire
 statistic that exists to make selection bias visible would defeat itself if the N behind
-it were selectable): N=1 → 0.894, 5 → 0.523, 10 → 0.372, **30 → 0.205**, 100 → 0.100.
+it were selectable). The curve at fixed illustrative points, shape unaffected by N moving
+(variant B): N=1 → 0.894, 5 → 0.523, 10 → 0.372, 30 → 0.205, 100 → 0.100 -- and **the actual
+current headline, N=31 → 0.201** (this is the number, not the N=30 curve point, that
+should be cited as "the" DSR from this point forward).
 
 ## Four hypotheses, tested (H-A through H-D)
 
@@ -116,7 +124,7 @@ almost all the damage. **This Sharpe is hostage to 4 weeks out of 538.**
 **H-B — "aggregate to monthly/quarterly; the CLT will tame the fat tails." → REJECTED.**
 Non-normality falls exactly as predicted (weekly skew -11.80/kurtosis 154.2 → monthly
 -4.77/30.1 → quarterly -1.97/8.3), but the loss of observations (T: 538→128→43) offsets
-it almost perfectly: DSR(N=30) goes 0.205 → 0.200 → 0.227. No material gain at any
+it almost perfectly: DSR(N=31) goes 0.201 → 0.197 → 0.223. No material gain at any
 horizon.
 
 **H-C — "use a measure that option-selling payoffs cannot game." → ADOPTED, with honest
@@ -195,10 +203,35 @@ prove with the data on hand. That tension is a finding, not a flaw to engineer a
 ## Trial-count rule
 
 **N counts anything that could have been reported as the result had it come out well.**
-The collateral fix could not -- it is a methodology correction, **N unchanged at 30**.
-Each QQQ/IWM cell tested (Experiment 30) and each future LLM-proposed hypothesis (W3)
-could -- **they increment N**, and every DSR quoted after that point must cite the N it
-was computed at.
+Two real precedents, decided the same week, with opposite answers -- both now pinned in
+`pipeline/falsify/trial_count.py`'s docstring so the next landing doesn't have to
+re-derive the principle:
+
+- **Experiment 29's own collateral-accounting bug fix does NOT count.** Fixing an
+  asymmetric cash-crediting error is a deterministic correction with a single right
+  answer -- there was never a world where "computing it correctly" could have come out two
+  different ways. No new draw happened; an existing draw was mis-transcribed, then fixed.
+  **N stayed at 30** through this fix.
+- **Experiment 30 (stock-4f's re-verification of the ML track's null result against
+  split-adjustment-corrected data, landed 2026-09-03) DOES count**, and moved **N from 30
+  to 31**. It re-ran an existing hypothesis's exact methodology against genuinely different,
+  corrected input data, with an outcome that was NOT knowable in advance: mean_ic flipped
+  sign in both re-run variants and both t-stats moved substantially toward significance
+  (-0.73→-0.35, -1.13→-0.27) -- this could plausibly have crossed the |t|=2.0 bar and been
+  reported as a real signal. It happened not to. That it *could have* is what makes it a
+  trial, not a bug fix, even though the underlying hypothesis was already on the ledger.
+
+**The distinguishing test:** does the correction have a single knowable right answer that
+fixing merely reveals (not a trial), or does it require a fresh statistical draw against
+changed evidence whose result could not be known beforehand (a trial)? A bug in the
+*scoring* of a fixed outcome is the former; a bug in the *data* feeding a live statistical
+test is the latter.
+
+**Every DSR quoted after N moves must cite the N it was computed at** -- this document's
+own N=30 references were caught stale by a peer session's review the same day N changed,
+which is exactly the failure this rule exists to prevent and exactly why it isn't optional.
+(Also renumbered: this plan's W5/QQQ-IWM work, if built, is no longer "Experiment 30" --
+that number now belongs to the ML re-verification. It would be Experiment 31.)
 
 ## The honest headline
 

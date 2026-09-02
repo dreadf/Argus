@@ -14,11 +14,15 @@ G1's <10s budget blown by a single test, so it runs on its own:
         python -m pytest tests/test_audit.py -m slow -v
 
 Every figure below was read directly off a real run of `python -m
-pipeline.falsify.audit` on 2026-09-02 (confirmed byte-identical across two
-consecutive runs first). If this test ever fails, the writeup is wrong
-(update it) or the code changed (figure out why and update both
-deliberately) -- it must never be "fixed" by loosening the tolerance to
-match whatever the code happens to produce that day.
+pipeline.falsify.audit` on 2026-09-02, then re-verified 2026-09-03 after
+Experiment 30 landed and changed the trial count N from 30 to 31 (see
+trial_count.py's docstring for why Experiment 30 counts as a trial and
+Experiment 29's own collateral-bug fix does not) -- confirmed
+byte-identical across two consecutive runs first, both times. If this
+test ever fails, the writeup is wrong (update it) or the code changed
+(figure out why and update both deliberately) -- it must never be "fixed"
+by loosening the tolerance to match whatever the code happens to produce
+that day.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from __future__ import annotations
 import pytest
 
 from pipeline.falsify.audit import run_audit
+from pipeline.falsify.trial_count import total_trial_count
 
 pytestmark = pytest.mark.slow
 
@@ -33,6 +38,22 @@ pytestmark = pytest.mark.slow
 @pytest.fixture(scope="module")
 def audit_report():
     return run_audit()
+
+
+def test_headline_n_is_computed_not_hardcoded(audit_report):
+    """The exact staleness this test exists to prevent already happened
+    once: audit.py used to have its own N_TRIALS_HEADLINE = 30 module
+    constant, which silently went stale the moment Experiment 30 landed
+    and changed the true count to 31. Fixed by computing headline_n from
+    trial_count.total_trial_count() at call time instead -- this asserts
+    the audit's own headline_n always matches that live source, and a
+    source-level check (mirroring deflated_sharpe.py's own C1 test) that
+    audit.py never reintroduces a second hardcoded copy."""
+    assert audit_report["headline_n"] == total_trial_count()
+
+    import pipeline.falsify.audit as mod
+    src = open(mod.__file__).read()
+    assert "N_TRIALS_HEADLINE" not in src, "a hardcoded headline N constant was reintroduced into audit.py"
 
 
 def test_variant_b_single_position(audit_report):
@@ -43,7 +64,9 @@ def test_variant_b_single_position(audit_report):
     assert b["sharpe"] == pytest.approx(0.574, abs=2e-3)
     assert b["max_drawdown"] == pytest.approx(0.0289, abs=5e-4)
     assert b["psr_n1"] == pytest.approx(0.8942, abs=5e-4)
-    assert b["dsr_curve"][30] == pytest.approx(0.2049, abs=5e-4)
+    assert b["dsr_curve"][30] == pytest.approx(0.2049, abs=5e-4)  # illustrative curve point, NOT the current headline N
+    assert b["dsr_headline_n"] == 31
+    assert b["dsr_headline"] == pytest.approx(0.2011, abs=5e-4)
 
 
 def test_variant_c_two_concurrent_reproduces_repo_published_figures(audit_report):
@@ -59,7 +82,9 @@ def test_variant_c_two_concurrent_reproduces_repo_published_figures(audit_report
     assert c["annualized_vol"] == pytest.approx(0.0327, abs=5e-4)  # EXPERIMENT.md 12d
     assert c["max_drawdown"] == pytest.approx(0.059, abs=5e-4)  # README.md (post-correction)
     assert c["sharpe"] == pytest.approx(0.563, abs=2e-3)
-    assert c["dsr_curve"][30] == pytest.approx(0.2004, abs=5e-4)
+    assert c["dsr_curve"][30] == pytest.approx(0.2004, abs=5e-4)  # illustrative curve point, NOT the current headline N
+    assert c["dsr_headline_n"] == 31
+    assert c["dsr_headline"] == pytest.approx(0.1966, abs=5e-4)
 
 
 def test_mintrl(audit_report):
@@ -111,11 +136,17 @@ def test_bootstrap_ci_matches_the_right_skewed_finding(audit_report):
 
 def test_monthly_quarterly_aggregation_h_b(audit_report):
     """H-B: aggregating to monthly/quarterly should visibly tame skew and
-    kurtosis (the CLT working as expected) while DSR(N=30) stays roughly
-    flat, because the loss of observations offsets the non-normality gain.
-    This whole comparison previously existed only as prose, never as a
-    reproducible section -- exactly the gap that let the 0.49 error happen
-    on a DIFFERENT number in this same document."""
+    kurtosis (the CLT working as expected) while the headline DSR stays
+    roughly flat, because the loss of observations offsets the
+    non-normality gain. This whole comparison previously existed only as
+    prose, never as a reproducible section -- exactly the gap that let the
+    0.49 error happen on a DIFFERENT number in this same document.
+
+    Values are at N=31 (post-Experiment-30); field renamed from the
+    N-specific `dsr_n30` to `dsr_headline` for the same reason
+    test_headline_n_is_computed_not_hardcoded exists -- a field name that
+    bakes in a specific N is the same staleness risk as a hardcoded
+    constant, just moved one level up."""
     levels = audit_report["aggregation_levels"]
     assert levels["weekly"]["n_periods"] == 538
     assert levels["monthly"]["n_periods"] == 128
@@ -127,11 +158,11 @@ def test_monthly_quarterly_aggregation_h_b(audit_report):
     skews = [abs(levels[l]["skew"]) for l in ("weekly", "monthly", "quarterly")]
     assert skews[0] > skews[1] > skews[2], f"|skew| should fall as periods lengthen, got {skews}"
 
-    assert levels["weekly"]["dsr_n30"] == pytest.approx(0.2049, abs=5e-4)
-    assert levels["monthly"]["dsr_n30"] == pytest.approx(0.2004, abs=5e-4)
-    assert levels["quarterly"]["dsr_n30"] == pytest.approx(0.2267, abs=5e-4)
+    assert levels["weekly"]["dsr_headline"] == pytest.approx(0.2011, abs=5e-4)
+    assert levels["monthly"]["dsr_headline"] == pytest.approx(0.1967, abs=5e-4)
+    assert levels["quarterly"]["dsr_headline"] == pytest.approx(0.2227, abs=5e-4)
     # the whole point of H-B: DSR must NOT meaningfully improve at any horizon
-    assert max(levels[l]["dsr_n30"] for l in levels) - min(levels[l]["dsr_n30"] for l in levels) < 0.05, \
+    assert max(levels[l]["dsr_headline"] for l in levels) - min(levels[l]["dsr_headline"] for l in levels) < 0.05, \
         "H-B claims no material gain at any aggregation horizon -- this checks that claim, not just the numbers"
 
 

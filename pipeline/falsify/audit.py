@@ -61,10 +61,10 @@ from pipeline.falsify.equity_sim import (
     simulate_weekly_returns,
 )
 from pipeline.falsify.mppm import lever_returns, mppm_sweep
+from pipeline.falsify.trial_count import total_trial_count
 
 CASH_WEEKLY = CASH_ANNUAL_RATE / WEEKS_PER_YEAR
-N_TRIALS_CURVE = (1, 5, 10, 30, 100)
-N_TRIALS_HEADLINE = 30  # EXPERIMENT_MD_BASE_COUNT (29) + Experiment 28 -- see trial_count.py
+N_TRIALS_CURVE = (1, 5, 10, 30, 100)  # illustrative points, NOT "current N" -- run_audit() computes the real N via trial_count.total_trial_count()
 BOOTSTRAP_SEED = 42
 BOOTSTRAP_BLOCK_SIZE = 8
 BOOTSTRAP_N_RESAMPLES = 5000
@@ -85,7 +85,7 @@ def _build_result_and_traded():
     return result, traded
 
 
-def compute_variant(result, traded, n_concurrent: int, label: str) -> dict:
+def compute_variant(result, traded, n_concurrent: int, label: str, headline_n: int) -> dict:
     wr = simulate_weekly_returns(
         result, traded, per_trade_cap_pct=0.03,
         slippage_per_share=DEFAULT_SLIPPAGE_PER_SHARE, n_concurrent=n_concurrent,
@@ -103,6 +103,7 @@ def compute_variant(result, traded, n_concurrent: int, label: str) -> dict:
 
     dsr_n1 = deflated_sharpe_ratio(wr, n_trials=1, risk_free_per_period=CASH_WEEKLY)
     dsr_curve = deflated_sharpe_curve(wr, N_TRIALS_CURVE, risk_free_per_period=CASH_WEEKLY)
+    dsr_headline = deflated_sharpe_ratio(wr, n_trials=headline_n, risk_free_per_period=CASH_WEEKLY)
 
     return {
         "label": label,
@@ -114,15 +115,23 @@ def compute_variant(result, traded, n_concurrent: int, label: str) -> dict:
         "max_drawdown": max_dd,
         "psr_n1": dsr_n1["dsr"],
         "dsr_curve": dsr_curve,
+        # THE headline DSR -- always computed from trial_count.total_trial_count()
+        # at call time, never a second hardcoded N (that staleness is exactly
+        # what happened here: this used to be a module constant that silently
+        # went stale when Experiment 30 landed -- see trial_count.py's docstring
+        # for why Experiment 30 counts and Experiment 29's own bug fix doesn't).
+        "dsr_headline_n": headline_n,
+        "dsr_headline": dsr_headline["dsr"],
         "weekly_returns": wr,
     }
 
 
 def run_audit() -> dict:
     result, traded = _build_result_and_traded()
+    headline_n = total_trial_count()  # computed fresh every call -- see trial_count.py
 
-    variant_b = compute_variant(result, traded, n_concurrent=1, label="B (single position, 3% cap)")
-    variant_c = compute_variant(result, traded, n_concurrent=2, label="C (2 concurrent, 6% cap)")
+    variant_b = compute_variant(result, traded, n_concurrent=1, label="B (single position, 3% cap)", headline_n=headline_n)
+    variant_c = compute_variant(result, traded, n_concurrent=2, label="C (2 concurrent, 6% cap)", headline_n=headline_n)
 
     wr = variant_b["weekly_returns"]
     excess = wr - CASH_WEEKLY
@@ -162,7 +171,7 @@ def run_audit() -> dict:
     # error, corrected 2026-09-02) -- this is the fix: make it a permanent,
     # reproducible section instead of an ad hoc check that has to be redone
     # correctly by hand every time someone wants to cite it.
-    unfiltered_c = compute_variant(result, unfiltered_traded, n_concurrent=2, label="C unfiltered")
+    unfiltered_c = compute_variant(result, unfiltered_traded, n_concurrent=2, label="C unfiltered", headline_n=headline_n)
     filtered_vs_unfiltered_c = {
         "filtered_sharpe": variant_c["sharpe"],
         "unfiltered_sharpe": unfiltered_c["sharpe"],
@@ -190,8 +199,8 @@ def run_audit() -> dict:
         rf = CASH_ANNUAL_RATE / periods_per_year
         ex = agg - rf
         ag3, ag4 = _skew_kurtosis(ex)
-        d = deflated_sharpe_ratio(agg, n_trials=N_TRIALS_HEADLINE, risk_free_per_period=rf)
-        aggregation_levels[label] = {"n_periods": len(agg), "skew": ag3, "kurtosis": ag4, "dsr_n30": d["dsr"]}
+        d = deflated_sharpe_ratio(agg, n_trials=headline_n, risk_free_per_period=rf)
+        aggregation_levels[label] = {"n_periods": len(agg), "skew": ag3, "kurtosis": ag4, "dsr_headline": d["dsr"]}
 
     # Ex-2018 breakdown (variant C basis) -- EXPERIMENT.md 12d and README
     # both make a claim about the filter's benefit being concentrated in
@@ -203,11 +212,12 @@ def run_audit() -> dict:
     unfiltered_ex2018 = unfiltered_traded[not_2018].reset_index(drop=True)
     ex2018 = {
         "n_weeks": int(not_2018.sum()),
-        "filtered": compute_variant(result_ex2018, traded_ex2018, n_concurrent=2, label="C filtered ex-2018"),
-        "unfiltered": compute_variant(result_ex2018, unfiltered_ex2018, n_concurrent=2, label="C unfiltered ex-2018"),
+        "filtered": compute_variant(result_ex2018, traded_ex2018, n_concurrent=2, label="C filtered ex-2018", headline_n=headline_n),
+        "unfiltered": compute_variant(result_ex2018, unfiltered_ex2018, n_concurrent=2, label="C unfiltered ex-2018", headline_n=headline_n),
     }
 
     return {
+        "headline_n": headline_n,
         "variant_b": variant_b,
         "variant_c": variant_c,
         "mintrl_weeks": mintrl_weeks,
@@ -230,11 +240,15 @@ def run_audit() -> dict:
 
 def _print_report(r: dict) -> None:
     b, c = r["variant_b"], r["variant_c"]
+    headline_n = r["headline_n"]
     print("=== Experiment 29: Sharpe audit (reproducible via `python -m pipeline.falsify.audit`) ===\n")
+    print(f"Trial count N = {headline_n} (pipeline.falsify.trial_count.total_trial_count() -- "
+          f"computed fresh every run, never hardcoded here)\n")
     for v in (b, c):
         print(f"{v['label']}: weeks={v['weeks']}  ann_return={v['annualized_return']:.4%}  "
               f"ann_vol={v['annualized_vol']:.4%}  Sharpe={v['sharpe']:+.3f}  "
-              f"max_DD={v['max_drawdown']:.2%}  PSR(N=1)={v['psr_n1']:.4f}")
+              f"max_DD={v['max_drawdown']:.2%}  PSR(N=1)={v['psr_n1']:.4f}  "
+              f"DSR(N={headline_n})={v['dsr_headline']:.4f}")
         for n, dsr in v["dsr_curve"].items():
             print(f"    DSR(N={n:>3}) = {dsr:.4f}")
     print()
@@ -254,7 +268,7 @@ def _print_report(r: dict) -> None:
     print("Monthly/quarterly aggregation (H-B -- does the CLT tame the fat tails?):")
     for label, agg in r["aggregation_levels"].items():
         print(f"    {label:10s} n={agg['n_periods']:4d}  skew={agg['skew']:+6.2f}  "
-              f"kurtosis={agg['kurtosis']:7.1f}  DSR(N={N_TRIALS_HEADLINE})={agg['dsr_n30']:.4f}")
+              f"kurtosis={agg['kurtosis']:7.1f}  DSR(N={r['headline_n']})={agg['dsr_headline']:.4f}")
     print()
     print("MPPM (variant B, annualized certainty-equivalent excess return):")
     for rho in r["mppm_filtered"]:
