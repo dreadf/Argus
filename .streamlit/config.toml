@@ -1,16 +1,17 @@
-# Design tokens for the public dashboard: a warm-neutral "instrument panel"
-# palette with a teal accent (previously amber -- dropped after direct
-# feedback: "I don't like the yellowish look"). Kept in config.toml (not
-# just inline CSS) so Streamlit's own native widgets (st.dataframe,
-# st.metric borders, buttons) pick these up automatically -- custom CSS
-# in app.py cannot reach inside those canvas-rendered components.
+# Design tokens matched to the public dashboard's exact palette
+# (public/style.css's :root block) so the local admin console reads as the
+# same product's operator view, not a different tool -- direct feedback
+# after the two drifted apart visually. Kept in config.toml (not just
+# inline CSS) so Streamlit's own native widgets (st.dataframe, st.metric
+# borders, buttons) pick these up automatically -- custom CSS in app.py
+# cannot reach inside those canvas-rendered components.
 
 [theme]
 base = "dark"
 primaryColor = "#4FBDBA"
-backgroundColor = "#14120F"
-secondaryBackgroundColor = "#1D1A16"
-textColor = "#EAE3D6"
+backgroundColor = "#0F1417"
+secondaryBackgroundColor = "#171D21"
+textColor = "#E7ECEF"
 font = "sans serif"
 
 [server]

@@ -4,9 +4,9 @@ A learning-first, experiment-driven ML pipeline built for the **Alpaca AI Tradin
 
 > **Can market-derived information from Alpaca historical data provide a robust out-of-sample signal for whether a stock will have a positive or negative return over the next 5 trading days?**
 
-Full research plan and philosophy: [`Project_Context_and_Plan_Updated.md`](Project_Context_and_Plan_Updated.md) and [`ML_Experiment_Plan.md`](ML_Experiment_Plan.md).
+Full research plan and philosophy (archived, superseded by `VOLATILITY_ML_PLAN.md`): [`archive/Project_Context_and_Plan_Updated.md`](archive/Project_Context_and_Plan_Updated.md) and [`archive/ML_Experiment_Plan.md`](archive/ML_Experiment_Plan.md).
 Full experiment log (what was tried, why, results, interpretation): [`EXPERIMENT.md`](EXPERIMENT.md).
-Trading-system foundation (what gets built downstream of the model, and why it can be built in parallel): [`TRADING_SYSTEM_PLAN.md`](TRADING_SYSTEM_PLAN.md).
+Trading-system foundation (archived, superseded by `OPTIONS_SYSTEM_PLAN.md`): [`archive/TRADING_SYSTEM_PLAN.md`](archive/TRADING_SYSTEM_PLAN.md).
 
 ## Key finding so far
 

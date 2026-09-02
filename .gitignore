@@ -21,3 +21,18 @@ output/audit/*.jsonl
 !TRADING_SYSTEM_PLAN.md
 !ML_Experiment_Plan.md
 !RESEARCH_pooling_vs_individual.md
+!EXPERIMENT_28_VRP.md
+!SUBMISSION_CHECKLIST.md
+.vercel
+.env*
+
+# Runtime-generated bot artifacts that predate any rule matching their
+# extension (output/audit/*.jsonl and output/data/*.csv were already
+# covered; these were untracked only by luck, not by an explicit rule).
+output/audit/*.log
+output/audit/*.json
+
+# Local-only admin-panel state (pipeline/execution/pause.py) -- never
+# meant to sync anywhere, same as the audit log and data caches above.
+output/state/
+output/data/*.json

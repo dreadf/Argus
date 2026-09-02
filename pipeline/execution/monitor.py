@@ -160,7 +160,7 @@ def _raw_qty(raw_positions: list, symbol: str, side) -> int:
     return 0
 
 
-def run_once(dry_run: bool = True, today: date | None = None) -> dict:
+def run_once(dry_run: bool = True, today: date | None = None, manual_close_reason: str | None = None) -> dict:
     """Item 1's fix: this is the function a scheduler must call every ~15
     minutes during market hours (cron/systemd timer -- see the module
     docstring). Without something invoking this on a timer, every exit rule
@@ -174,6 +174,12 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     rule, and submits + logs any resulting close. Every cycle is logged,
     including a cycle where nothing happens, so a monitor outage is
     visible in the audit trail rather than silent.
+
+    manual_close_reason: set by the CONTROLS_ENABLED admin panel's
+    "force-close all positions" button, never by the scheduled cron call.
+    Forces every open position through the exact same close path as the
+    hard-drawdown auto-close below (build_close_order, submit, audit log)
+    rather than duplicating that logic for an operator-triggered close.
     """
     from alpaca.trading.enums import PositionSide
 
@@ -204,7 +210,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     closed = []
 
     account_action = evaluate_account({"current_equity": account["current_equity"], "peak_equity": account["peak_equity"]})
-    force_close_all = account_action["action"] == "close_everything_halt"
+    force_close_all = manual_close_reason is not None or account_action["action"] == "close_everything_halt"
 
     for position in positions:
         short_qty = _raw_qty(raw_positions, position["short_symbol"], PositionSide.SHORT)
@@ -218,7 +224,9 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         if short_qty == 0 and long_qty == 0:
             continue  # already flat (closed outside this loop, or never actually filled)
 
-        if force_close_all:
+        if manual_close_reason is not None:
+            action_result = {"action": "manual_force_close", "reason": manual_close_reason}
+        elif force_close_all:
             action_result = {"action": "close_everything_halt", "reason": account_action["reason"]}
         else:
             mids = fetch_option_mids([position["short_symbol"], position["long_symbol"]])

@@ -59,10 +59,41 @@ def bs_put(spot: float, strike: float, tau_years: float, sigma: float, r: float 
     return strike * math.exp(-r * tau_years) * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
 
 
+def spread_value(spot: float, short_k: float, long_k: float, tau_years: float, sigma: float) -> float:
+    """Black-Scholes value of a short-put vertical (sell short_k, buy
+    long_k) -- the fee this system collects, priced under a given
+    volatility input. Used with the k(vol)-adjusted VIX9D input for the
+    reconstruction's implied-vol side, and with trailing realized SPY
+    volatility for Experiment 21's vrp_edge measure below: same closed
+    form, only sigma differs, so the two sides can never drift apart on
+    anything but volatility itself."""
+    return bs_put(spot, short_k, tau_years, sigma) - bs_put(spot, long_k, tau_years, sigma)
+
+
 def _spread_credit(row, a: float, b: float, vix9d_col: str = "v9") -> float:
     k = a + b * row[vix9d_col]
     sigma = k * row[vix9d_col]
-    return bs_put(row.spot_entry, row.short_strike, row.tau, sigma) - bs_put(row.spot_entry, row.long_strike, row.tau, sigma)
+    return spread_value(row.spot_entry, row.short_strike, row.long_strike, row.tau, sigma)
+
+
+REALIZED_VOL_WINDOW = 20  # trading days, matching Vetoed-style "20-day realized vol" convention
+
+
+def _realized_vol_series(closes: pd.Series, window: int = REALIZED_VOL_WINDOW) -> pd.Series:
+    """Rolling annualized realized volatility on log returns -- the same
+    formula as pipeline.options.vol.realized_vol_series (log returns,
+    ddof=1, sqrt(252) annualization), reimplemented locally rather than
+    imported: that module constructs a live Alpaca client at import time
+    and raises if ALPACA_API_KEY isn't set at all, which would make this
+    module -- today importable and testable with zero credentials --
+    require a key just to import. pandas' .rolling() is trailing by
+    construction (the value at index i uses only rows <= i), so this
+    carries no lookahead: the value at `entry` uses only closes up to
+    and including `entry`. The first `window` rows are NaN, not zero --
+    a silent zero would read as "no premium" and bias every downstream
+    aggregate low."""
+    log_rets = np.log(closes / closes.shift(1))
+    return log_rets.rolling(window).std(ddof=1) * np.sqrt(252)
 
 
 def _load_real_flagship_weeks(distance: float = 0.03, width: float = 5.0) -> pd.DataFrame:
@@ -133,12 +164,28 @@ def replay(a: float, b: float, distance: float = 0.03, width: float = 5.0,
     from `start` to `end` (default: latest cached data), using real SPY
     closes throughout and the validated k(vol) model only for the fee.
     Every loss in the output is real; only the credit column is modelled
-    before Feb 2024."""
+    before Feb 2024.
+
+    Also reports vrp_edge (Experiment 21): the same spread priced a
+    second time with trailing realized SPY volatility instead of the
+    VIX9D-derived implied input, via the identical spread_value() closed
+    form. This system is a net SELLER -- it collects `credit` (the
+    implied-vol price) and expects to owe `payout` (what realized moves
+    actually cost), so vrp_edge = credit - value_realized is positive
+    exactly when the market is paying more for this spread than recent
+    realized volatility would justify. This is a REPORTED MEASUREMENT
+    added alongside the existing columns, not a new filter: it does not
+    change `credit`, `payout`, `pnl`, or `win`, so every number this
+    module already validates and every downstream consumer of this
+    output (the dashboard, EXPERIMENT.md's headline figures) is
+    unaffected by its presence."""
     spy = pd.read_csv(SPY_LONG_PATH, parse_dates=["date"]).set_index("date")["close"].sort_index()
     v9 = load_cached_vix("VIX9D") / 100.0
     v3m = load_cached_vix("VIX3M") / 100.0
     if end is not None:
         spy = spy.loc[:end]
+
+    rv = _realized_vol_series(spy)
 
     fridays = [d for d in spy.index if d.weekday() == 4]
     rows = []
@@ -156,8 +203,17 @@ def replay(a: float, b: float, distance: float = 0.03, width: float = 5.0,
         long_k = short_k - width
         k = a + b * sigma_input
         sigma = k * sigma_input
-        credit = bs_put(spot, short_k, tau, sigma) - bs_put(spot, long_k, tau, sigma)
+        credit = spread_value(spot, short_k, long_k, tau, sigma)
         payout = max(0.0, short_k - float(spy.loc[expiry])) - max(0.0, long_k - float(spy.loc[expiry]))
+
+        sigma_realized = float(rv.loc[entry]) if entry in rv.index else np.nan
+        if pd.notna(sigma_realized):
+            value_realized = spread_value(spot, short_k, long_k, tau, sigma_realized)
+            vrp_edge = credit - value_realized
+        else:
+            value_realized = np.nan
+            vrp_edge = np.nan
+
         rows.append({
             "entry": entry, "expiry": expiry, "year": entry.year,
             "spot_entry": spot, "vix9d": sigma_input, "vix3m": float(v3m.loc[entry]),
@@ -165,6 +221,7 @@ def replay(a: float, b: float, distance: float = 0.03, width: float = 5.0,
             "short_strike": short_k, "long_strike": long_k,
             "credit": credit, "payout": payout, "pnl": credit - payout,
             "win": payout <= 1e-9,
+            "sigma_realized": sigma_realized, "value_realized": value_realized, "vrp_edge": vrp_edge,
         })
     return pd.DataFrame(rows)
 

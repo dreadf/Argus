@@ -1,36 +1,25 @@
 """
-Streamlit dashboard. Deliberately reads from FILES (the committed backtest
-and evidence-gate CSVs, the audit log) rather than requiring a live trade to
-have happened -- so the public URL always has real content, even on a fresh
-deploy with zero positions and before market open (Part 7's design: "the
-dashboard's headline content comes from the backtest, which exists before
-any trade does").
+Streamlit dashboard -- the LOCAL ADMIN CONSOLE (CONTROLS_ENABLED=true). The
+public-facing dashboard is now the static site in public/ (Vercel); this
+file is never deployed publicly, only run locally by the operator.
 
-CONTROLS_ENABLED gates write actions. No write actions exist anywhere in
-this codebase -- the flag is wired for a future write action to check, not
-a currently-missing feature.
+Content parity with public/: this file renders from the SAME four functions
+(scripts.export_dashboard_data.build_overview/build_track_record/
+build_decisions/build_evidence) that produce public/data/*.json for the
+Vercel site -- not a separate re-derivation of the same numbers. Two things
+stay genuinely live-and-separate in both places: the direct Alpaca
+account/positions fetch (Vercel: api/account.py; here: get_account_state),
+and the research-track vol_forecast call (no export script wires that one
+up yet). Direct feedback after an earlier round drifted the two dashboards
+apart in both palette and content: "the layout needs to be identical, the
+numbers and the visualization needs to be identical... the visual
+hierarchy, the content, the placement, the tabs are all the same." Card
+chrome (exact borders/shadows) is allowed to differ -- Streamlit's
+component model can't be pixel-identical to hand-built HTML/CSS.
 
 Every section is wrapped so a missing file, a broker error, or an empty log
 renders a plain message instead of a stack trace (Verification #22, the
 cold-open drill).
-
-Layout, fourth rewrite. Prior rounds fixed the wrong layer: round 2 added a
-status hero + tabs but Overview still carried 3 headers, ~9 metrics, a
-table, and bullet essays -- direct feedback was "no clear hierarchy...
-nothing that actually make sense," and separately "I don't like the
-yellowish look" (the amber accent) and "add a headline to every graph and
-table". This round: (1) drops amber for a two-color semantic system
-(teal=good/active, coral=negative/blocked) that isn't reused for four
-different meanings, (2) gives every chart/table a small-caps title + a
-one-line description of how to read it, (3) restyles st.tabs into a
-navbar-like bar via Streamlit's underlying BaseWeb selectors, (4) adds a
-"today's decision path" card -- the four real gates (evidence bar / guard
-check / reviewer / order) today's one proposal actually passed through,
-framed honestly as a single-candidate pipeline, not a multi-candidate
-funnel this system doesn't run, and (5) an enriched open-positions table
-and a filterable decision log, both built from data that already exists
-(parse_occ_symbol, the audit log, live broker positions) rather than any
-new data source.
 """
 
 from __future__ import annotations
@@ -44,24 +33,22 @@ from pathlib import Path
 # way `streamlit run` from the repo root locally does -- confirmed via a
 # real deploy log: ModuleNotFoundError: No module named 'pipeline' at the
 # `pipeline.audit.log` import below. Must run before any pipeline.* import.
+# Also puts scripts/ (an implicit namespace package, no __init__.py needed)
+# on the path for build_overview() etc. below.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 import streamlit as st
 
 from pipeline.audit.log import read_log
-from pipeline.risk.options_config import MAX_CONCURRENT_POSITIONS
+from scripts.export_dashboard_data import build_decisions, build_evidence, build_overview, build_track_record
 
 CONTROLS_ENABLED = os.getenv("CONTROLS_ENABLED", "false").lower() in ("true", "1", "yes")
 
 st.set_page_config(page_title="Evidence Gate", page_icon="📉", layout="wide")
 
-# Design tokens: warm-neutral instrument-panel background, ONE brand accent
-# (teal -- replacing amber after "I don't like the yellowish look"), and
-# exactly two semantic colors (sage=good, coral=negative/blocked) instead
-# of the four-way system the previous round used, which was itself part of
-# "too many things competing." Palette also set in .streamlit/config.toml
-# so native widgets (st.dataframe, st.metric) pick it up directly.
+# Design tokens matched token-for-token to public/style.css's :root block, so
+# this reads as the same product's operator view, not a different tool.
 st.markdown(
     """
     <style>
@@ -74,41 +61,119 @@ st.markdown(
         font-variant-numeric: tabular-nums;
         font-weight: 500;
     }
-    [data-testid="stMetricLabel"] { font-size: 0.78rem; color: #8F8575; }
+    [data-testid="stMetricLabel"] { font-size: 0.78rem; color: #8B98A0; }
 
     h1.page-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 1.7rem; margin-bottom: 0.1rem; display: inline; }
-    .mode-text { color: #6B6357; font-size: 0.85rem; margin-left: 0.6rem; }
+    .mode-text { color: #63707A; font-size: 0.85rem; margin-left: 0.6rem; }
 
-    .status-line { font-size: 0.98rem; margin: 0.9rem 0 1.2rem 0; color: #C7BFAF; }
+    .status-line { font-size: 0.98rem; margin: 0.9rem 0 1.2rem 0; color: #C5CFD4; }
     .status-line .word { font-weight: 600; }
-    .status-line .word.good { color: #6FBF8A; }
-    .status-line .word.bad { color: #E0796B; }
-    .status-line .word.neutral { color: #8F8575; }
-    .status-line .time { color: #6B6357; font-size: 0.85em; }
+    .status-line .word.good { color: #5FBF95; }
+    .status-line .word.bad { color: #E2726E; }
+    .status-line .word.neutral { color: #8B98A0; }
+    .status-line .time { color: #63707A; font-size: 0.85em; }
 
-    /* Every chart/table gets this: a small-caps title and a one-line
-       description of how to read it -- the explicit ask this round. */
-    .card-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; letter-spacing: 0.07em; text-transform: uppercase; color: #EAE3D6; font-weight: 600; }
-    .card-subtitle { font-size: 0.82rem; color: #8F8575; margin: 0.1rem 0 0.7rem 0; }
+    .card-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; letter-spacing: 0.07em; text-transform: uppercase; color: #E7ECEF; font-weight: 600; }
+    .card-subtitle { font-size: 0.82rem; color: #8B98A0; margin: 0.1rem 0 0.7rem 0; }
+    .card-section-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #63707A; margin: 0 0 0.7rem 0; }
+    .card-note { font-size: 0.86rem; color: #C5CFD4; margin: 0.6rem 0 0; }
+    .card-note.good { color: #5FBF95; }
+    .card-note.bad { color: #E2726E; }
 
-    .path-row { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.35rem 0; border-bottom: 1px solid #262119; }
+    /* KPI tile: one large headline number (Account card's Equity). */
+    .kpi-row { display: flex; gap: 0.8rem; margin-bottom: 1rem; }
+    .kpi-tile { background: transparent; border: 1px solid #2A3238; border-left: 3px solid #4FBDBA; border-radius: 8px; padding: 0.75rem 1rem; flex: 1; }
+    .kpi-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8B98A0; margin-bottom: 0.3rem; }
+    .kpi-value { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 1.75rem; font-weight: 600; line-height: 1.15; color: #E7ECEF; }
+
+    /* Metric tile: smaller supporting numbers (a metric-row of several). */
+    .metric-row { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 1rem; }
+    .metric-tile { background: transparent; border: 1px solid #2A3238; border-left: 3px solid #2A3238; border-radius: 8px; padding: 0.6rem 0.85rem; flex: 1; min-width: 9.5rem; }
+    .metric-tile.accent { border-left-color: #4FBDBA; }
+    .metric-tile.good { border-left-color: #5FBF95; }
+    .metric-tile.bad { border-left-color: #E2726E; }
+    .metric-label { font-size: 0.76rem; color: #8B98A0; margin-bottom: 0.15rem; }
+    .metric-value { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 1.2rem; font-weight: 500; color: #E7ECEF; }
+    .metric-value.good { color: #5FBF95; }
+    .metric-value.bad { color: #E2726E; }
+    .metric-help { font-size: 0.76rem; color: #63707A; margin-top: 0.15rem; }
+
+    /* "Today, in plain terms" narrative lines. */
+    .narrative-line { display: grid; grid-template-columns: 11.5rem 1fr; gap: 0.9rem; padding: 0.45rem 0; align-items: baseline; }
+    .narrative-label { font-weight: 700; }
+    .narrative-label.good { color: #5FBF95; }
+    .narrative-label.bad { color: #E2726E; }
+    .narrative-label.neutral { color: #8B98A0; }
+    .narrative-detail { font-size: 0.92rem; color: #C5CFD4; }
+
+    /* Volatility "equation" -- value / value = ratio -> verdict, one line. */
+    .equation { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; font-size: 1rem; margin-bottom: 0.5rem; }
+    .equation-box { background: transparent; border: 1px solid #2A3238; border-left: 3px solid #2A3238; border-radius: 8px; padding: 0.85rem 1rem; }
+    .equation-box.good { border-left-color: #5FBF95; }
+    .equation-box.bad { border-left-color: #E2726E; }
+    .equation-box.neutral { border-left-color: #2A3238; }
+    .equation .eq-item { display: flex; align-items: baseline; gap: 0.35rem; }
+    .equation .eq-label { font-size: 0.78rem; color: #8B98A0; }
+    .equation .eq-val { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-weight: 600; color: #E7ECEF; }
+    .equation .eq-op { color: #63707A; font-size: 1.05rem; }
+    .equation .eq-verdict { font-weight: 700; padding: 0.15rem 0.65rem; border-radius: 999px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    .equation .eq-verdict.good { color: #06201F; background: #5FBF95; }
+    .equation .eq-verdict.bad { color: #2B0906; background: #E2726E; }
+    .equation .eq-verdict.neutral { color: #E7ECEF; background: #2A3238; }
+
+    .path-row { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.35rem 0; border-bottom: 1px solid #2A3238; flex-wrap: wrap; }
     .path-row:last-child { border-bottom: none; }
-    .path-stage { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #6B6357; width: 6.5rem; flex-shrink: 0; }
+    .path-stage { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #63707A; width: 6.5rem; flex-shrink: 0; }
     .path-word { font-weight: 600; width: 7rem; flex-shrink: 0; }
-    .path-word.good { color: #6FBF8A; }
-    .path-word.bad { color: #E0796B; }
-    .path-word.neutral { color: #8F8575; }
-    .path-detail { font-size: 0.86rem; color: #C7BFAF; }
+    .path-word.good { color: #5FBF95; }
+    .path-word.bad { color: #E2726E; }
+    .path-word.neutral { color: #8B98A0; }
+    .path-detail { font-size: 0.86rem; color: #C5CFD4; }
+
+    /* Vertical stepper -- ported verbatim from public/style.css so "How it
+       works" is the same diagram, not a redrawn one. */
+    .stepper { list-style: none; margin: 1.2rem 0 0; padding: 0; }
+    .step { position: relative; display: flex; gap: 1rem; padding-bottom: 1.5rem; }
+    .step:last-child { padding-bottom: 0; }
+    .step:not(:last-child)::before {
+        content: ""; position: absolute; left: 1.05rem; top: 2.3rem; bottom: -0.3rem;
+        width: 1px; background: #2A3238; transform: translateX(-50%);
+    }
+    .step:has(+ .step-parallel)::before { background: none; border-left: 1px dashed #E2726E; width: 0; }
+    .step-marker {
+        position: relative; z-index: 1; flex-shrink: 0; width: 2.1rem; height: 2.1rem; border-radius: 50%;
+        border: 1px solid #2A3238; background: #171D21; display: flex; align-items: center; justify-content: center;
+        font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 0.9rem; color: #E7ECEF;
+    }
+    .step-marker.bad { border-color: #E2726E; color: #E2726E; }
+    .step-marker.accent { border-color: #4FBDBA; color: #4FBDBA; }
+    .step-body { flex: 1; min-width: 0; padding-top: 0.2rem; }
+    .step-title { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-weight: 600; margin-bottom: 0.3rem; color: #E7ECEF; }
+    .step-tag { font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; font-weight: 400; color: #8B98A0; }
+    .step-body p { margin: 0; font-size: 0.9rem; color: #C5CFD4; line-height: 1.55; }
+    .info-btn {
+        display: inline-flex; align-items: center; justify-content: center; width: 1.05rem; height: 1.05rem;
+        border-radius: 50%; border: 1px solid #63707A; color: #8B98A0; background: transparent;
+        font-family: 'IBM Plex Mono', monospace; font-size: 0.64rem; line-height: 1; padding: 0; cursor: pointer;
+    }
+    .info-btn:hover, .info-btn:focus-visible { border-color: #4FBDBA; color: #4FBDBA; }
+    .info-tip {
+        display: none; position: absolute; z-index: 20; left: 0; top: 1.6rem; width: min(22rem, 80vw);
+        background: #1D252A; border: 1px solid #2A3238; border-radius: 8px; padding: 0.65rem 0.8rem;
+        font-size: 0.8rem; font-weight: 400; line-height: 1.5; color: #C5CFD4; text-transform: none;
+        letter-spacing: normal; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    }
+    .info-btn:hover + .info-tip, .info-btn:focus-visible + .info-tip, .info-tip:hover { display: block; }
 
     /* Navbar-style tabs: Streamlit's tabs use BaseWeb components under
        these selectors -- rendered and confirmed present in this version
        (1.62.0) before relying on them. */
-    [data-baseweb="tab-list"] { gap: 0.2rem; border-bottom: 1px solid #322D26; margin-bottom: 1rem; }
+    [data-baseweb="tab-list"] { gap: 0.2rem; border-bottom: 1px solid #2A3238; margin-bottom: 1rem; }
     [data-baseweb="tab"] {
         font-family: 'IBM Plex Sans', sans-serif; font-size: 0.95rem; font-weight: 500;
-        height: 2.8rem; color: #8F8575;
+        height: 2.8rem; color: #8B98A0;
     }
-    [data-baseweb="tab"][aria-selected="true"] { color: #EAE3D6; }
+    [data-baseweb="tab"][aria-selected="true"] { color: #E7ECEF; }
     [data-baseweb="tab-highlight"] { background-color: #4FBDBA; height: 2px; }
     </style>
     """,
@@ -120,17 +185,21 @@ def _card_header(title: str, subtitle: str) -> None:
     st.markdown(f'<div class="card-title">{title}</div><div class="card-subtitle">{subtitle}</div>', unsafe_allow_html=True)
 
 
-def _clean(v):
-    """None/NaN -> None, otherwise pass through -- audit log rows round-trip
-    through JSON/CSV with inconsistent missing-value representations."""
-    if v is None:
-        return None
-    try:
-        if pd.isna(v):
-            return None
-    except (TypeError, ValueError):
-        pass
-    return v
+def _section_label(text: str) -> None:
+    st.markdown(f'<div class="card-section-label">{text}</div>', unsafe_allow_html=True)
+
+
+def _kpi_tile(label: str, value: str) -> str:
+    return f'<div class="kpi-tile"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
+
+
+def _metric_tile(label: str, value: str, help_text: str | None = None, cls: str = "") -> str:
+    help_html = f'<div class="metric-help">{help_text}</div>' if help_text else ""
+    return f'<div class="metric-tile {cls}"><div class="metric-label">{label}</div><div class="metric-value {cls}">{value}</div>{help_html}</div>'
+
+
+def _metric_row(tiles: list[str]) -> None:
+    st.markdown(f'<div class="metric-row">{"".join(tiles)}</div>', unsafe_allow_html=True)
 
 
 st.markdown(
@@ -140,9 +209,21 @@ st.markdown(
 )
 
 # ---------------------------------------------------------------------------
-# Load everything up front, once (None on any failure) -- the status line
-# and every tab below reuse these, nothing fetched or parsed twice.
+# Load everything up front, once. overview/track_record/decisions/evidence
+# come from the SAME functions that build public/data/*.json for the public
+# Vercel site -- one source of truth for every non-live number, so the two
+# dashboards can't silently drift into different numbers again.
 # ---------------------------------------------------------------------------
+try:
+    overview = build_overview()
+    track_record = build_track_record()
+    decisions_data = build_decisions()
+    evidence_data = build_evidence()
+    dashboard_data_error = None
+except Exception as e:
+    overview = track_record = decisions_data = evidence_data = None
+    dashboard_data_error = str(e)
+
 account_state = None
 try:
     from pipeline.execution.broker import get_account_state
@@ -154,448 +235,441 @@ except Exception as e:
 else:
     account_error = None
 
-log_df = None
-try:
-    log_df = read_log()
-except Exception as e:
-    log_error = str(e)
-else:
-    log_error = None
-
-latest_row = None
-if log_df is not None and not log_df.empty:
-    latest_row = log_df.sort_values("timestamp", ascending=False).iloc[0]
-
-curve_df = None
-curve_path = "output/data/equity_curve.csv"
-try:
-    if os.path.exists(curve_path):
-        curve_df = pd.read_csv(curve_path, parse_dates=["entry"]).set_index("entry")
-except Exception as e:
-    curve_error = str(e)
-else:
-    curve_error = None
-
-today_snapshot = None
-try:
-    from pipeline.data.vix import contango_ratio, current_contango_and_threshold, load_cached_vix, refresh_vix_cache
-    from pipeline.options.chain import get_spot
-    from pipeline.options.vol import fetch_recent_closes, realized_vol
-
-    _spot = get_spot()
-    _closes = fetch_recent_closes()
-    # A fresh Streamlit Cloud container has no cache file on disk at all
-    # (gitignored, same as the audit log) -- refresh before reading, same
-    # order run_agent.py uses, so this self-heals instead of erroring.
-    refresh_vix_cache()
-    _vix9d = load_cached_vix("VIX9D")
-    _vix3m = load_cached_vix("VIX3M")
-    _, _contango_threshold = current_contango_and_threshold()
-    _vix9d_decimal = float(_vix9d.iloc[-1]) / 100.0
-    _rv10d = realized_vol(_closes, 10)
-    today_snapshot = {
-        "spot": _spot,
-        "yesterday_move_pct": float(_closes.pct_change().iloc[-1]),
-        "contango": float(contango_ratio(_vix9d, _vix3m).iloc[-1]),
-        "contango_threshold": _contango_threshold,
-        "vix9d_decimal": _vix9d_decimal,
-        "rv10d": _rv10d,
-        "vol_ratio": _vix9d_decimal / _rv10d if _rv10d else None,
-    }
-except Exception as e:
-    snapshot_error = str(e)
-else:
-    snapshot_error = None
-
-gate_df, gate_choice = None, None
-gate_path = "output/data/evidence_gate_results.csv"
-try:
-    if os.path.exists(gate_path):
-        gate_df = pd.read_csv(gate_path)
-        from pipeline.options.selector import choose_distance_width
-
-        gate_choice = choose_distance_width(gate_df)
-except Exception as e:
-    gate_error = str(e)
-else:
-    gate_error = None
-
-# A separate research track (pipeline/vol/, EXPERIMENT.md Experiments 13-27)
-# built and validated a real volatility forecaster (HAR-X), then tested 8
-# independent ways of using it to pick strikes, size positions, or gate
-# trades -- all 8 came back negative. So it is INFORMATIONAL ONLY here,
-# never consumed by the Picker/Guard/Reviewer pipeline above.
 vol_forecast = None
 try:
     from pipeline.vol.deliverable import decide as vol_decide
 
     # live=True: refit on all history for a CURRENT number. The walk-forward
-    # series necessarily lags real data by up to one 63-day test block, which
-    # was showing a 55-day-stale forecast here.
+    # series necessarily lags real data by up to one 63-day test block.
     vol_forecast = vol_decide(date.today(), live=True)
 except Exception as e:
     vol_forecast_error = str(e)
 else:
     vol_forecast_error = None
 
-
-def _max_dd(s: pd.Series) -> float:
-    return float((s.cummax() - s).max())
-
-
-def _worst_year(df: pd.DataFrame, col: str) -> tuple[int, float]:
-    by_year = df.groupby(df.index.year)[col].sum()
-    return int(by_year.idxmin()), float(by_year.min())
-
+# ---------------------------------------------------------------------------
+# Status line: ONE sentence, straight from build_overview()'s own status
+# dict -- the same status computation the public site's narrative reads.
+# ---------------------------------------------------------------------------
+if dashboard_data_error is not None:
+    st.error(f"Could not load dashboard data ({dashboard_data_error}).")
+else:
+    status = overview["status"]
+    time_html = f' <span class="time">({status["timestamp"]})</span>' if status["timestamp"] else ""
+    st.markdown(
+        f'<p class="status-line"><span class="word {status["cls"]}">{status["word"]}</span> &mdash; {status["rest"]}{time_html}</p>',
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
-# Status line: ONE sentence, derived from the most recent logged decision.
+# Manual controls -- gated entirely on CONTROLS_ENABLED, not just disabled:
+# an earlier round shipped these always-visible-but-disabled (direct
+# feedback: take them back out). Placed immediately after the status line,
+# before any tab, so it's visible without scrolling in a controls-enabled
+# session -- direct feedback that burying it at the bottom of Overview
+# meant it wasn't immediately visible.
 # ---------------------------------------------------------------------------
-def _status_line(latest_row: pd.Series | None) -> tuple[str, str, str, str]:
-    """Returns (semantic_class, word, rest_of_sentence, timestamp)."""
-    if log_df is None:
-        return "neutral", "Status unknown", "could not read the decision log.", ""
-    if latest_row is None:
-        return "neutral", "Not yet run", "no decisions logged today.", ""
+if CONTROLS_ENABLED:
+    with st.container(border=True):
+        _card_header("Manual controls", "Local session only -- acts on the real paper account immediately")
 
-    outcome = _clean(latest_row.get("outcome"))
-    ts = str(latest_row.get("timestamp", ""))
+        from pipeline.execution.pause import is_trading_paused, pause_trading, resume_trading
 
-    if outcome == "SOLD":
-        n = int(latest_row["proposed_contracts"]) if pd.notna(latest_row.get("proposed_contracts")) else "?"
-        return ("good", "Trading",
-                f"opened {latest_row.get('short_symbol')} / {latest_row.get('long_symbol')}, {n} contract(s).", ts)
-    if outcome == "DRY_RUN":
-        return ("neutral", "Dry run",
-                f"would have opened {latest_row.get('short_symbol')} / {latest_row.get('long_symbol')} -- no real order sent.", ts)
-    if outcome == "SKIPPED":
-        reasons = latest_row.get("guards_failed")
-        reason_text = "; ".join(str(r) for r in reasons) if isinstance(reasons, list) and reasons else "no reason recorded."
-        return ("bad", "Declined to trade", reason_text, ts)
-    if outcome == "CLOSED":
-        return ("neutral", "Position closed", str(latest_row.get("close_reason", "")), ts)
-    if outcome == "EMERGENCY_CLOSE_ORPHAN":
-        return ("bad", "Emergency close", str(latest_row.get("close_reason", "")), ts)
-    return ("neutral", str(outcome), "", ts)
+        pause_state = is_trading_paused()
+        col_pause, col_run = st.columns(2)
+        with col_pause:
+            if pause_state is not None:
+                st.warning(f"Trading paused: {pause_state['reason']} (since {pause_state['paused_at']})")
+                if st.button("Resume trading"):
+                    resume_trading()
+                    st.rerun()
+            else:
+                st.caption("Pausing stops tomorrow's run before it evaluates anything -- today's decision, if any, already happened.")
+                if st.button("Pause trading"):
+                    pause_trading("paused from local admin panel")
+                    st.rerun()
+        with col_run:
+            st.caption(
+                "Runs the real decision pipeline now, LIVE -- the same Guard/Reviewer gates and the same "
+                "one-decision-per-day rule the cron uses, just triggered on demand instead of waiting for it. "
+                "A no-op if today's already decided."
+            )
+            if st.button("Run agent now (live)"):
+                from pipeline.run_agent import run_once as run_agent_once
 
+                with st.spinner("Running..."):
+                    result = run_agent_once(dry_run=False)
+                st.write(result)
 
-status_class, status_word, status_rest, status_ts = _status_line(latest_row)
-time_html = f' <span class="time">({status_ts})</span>' if status_ts else ""
-st.markdown(
-    f'<p class="status-line"><span class="word {status_class}">{status_word}</span> &mdash; {status_rest}{time_html}</p>',
-    unsafe_allow_html=True,
-)
+        st.write("")
+        st.markdown("**Force-close all open positions**")
+        st.caption(
+            "Closes every open spread at market immediately, through the same close path monitor.py's "
+            "hard-drawdown auto-close uses -- irreversible once submitted."
+        )
+        confirm = st.checkbox("I understand this immediately closes the real position(s) at market", key="confirm_force_close")
+        if st.button("Force-close all positions", disabled=not confirm, type="primary"):
+            from pipeline.execution.monitor import run_once as run_monitor_once
+
+            with st.spinner("Closing..."):
+                result = run_monitor_once(dry_run=False, manual_close_reason="operator requested via local admin panel")
+            st.write(result)
+            st.session_state["confirm_force_close"] = False
+
+if dashboard_data_error is not None:
+    st.stop()
 
 tab_overview, tab_track_record, tab_log, tab_how = st.tabs(
     ["Overview", "Track record", "Decision log", "How it works"]
 )
 
 # ---------------------------------------------------------------------------
-# Overview: today, and only today. Four headline+subtext cards -- account,
-# market, volatility, and the decision path -- then the positions table.
-# The historical pitch lives entirely in Track record, not duplicated here.
+# Overview -- same section order as public/index.html: narrative + account
+# side by side, then market/volatility/forecast, then decision path, then
+# open positions.
 # ---------------------------------------------------------------------------
 with tab_overview:
-    n_open = len(account_state.get("raw_positions") or []) if account_state is not None else 0
+    col_narrative, col_account = st.columns(2)
+
+    with col_narrative:
+        with st.container(border=True):
+            _card_header("Today, in plain terms", "The short version. Everything below is the supporting detail")
+            lines_html = "".join(
+                f'<div class="narrative-line"><span class="narrative-label {line["cls"]}">{line["label"]}</span>'
+                f'<span class="narrative-detail">{line["detail"]}</span></div>'
+                for line in overview["narrative"]
+            )
+            st.markdown(lines_html, unsafe_allow_html=True)
+            if overview["status"]["timestamp"]:
+                st.markdown(f'<p class="card-note">Last decision logged: {overview["status"]["timestamp"]}</p>', unsafe_allow_html=True)
+
+    with col_account:
+        with st.container(border=True):
+            _card_header("Account", "Cash plus what any open positions are worth right now, live from Alpaca")
+            if account_error is not None:
+                st.caption(f"Live account data unavailable right now ({account_error}).")
+            elif account_state is not None:
+                n_open = len(account_state.get("raw_positions") or [])
+                equity_value = f"${account_state['current_equity']:,.0f}"
+                st.markdown(f'<div class="kpi-row">{_kpi_tile("Equity", equity_value)}</div>', unsafe_allow_html=True)
+                tiles = [
+                    _metric_tile("Cash", f"${account_state['cash']:,.0f}"),
+                    _metric_tile("Options buying power", f"${account_state['options_buying_power']:,.0f}"),
+                    _metric_tile("Open positions", str(n_open)),
+                ]
+                if n_open > 0:
+                    unrealized = sum(
+                        float(p.unrealized_pl) for p in account_state["raw_positions"] if p.unrealized_pl is not None
+                    )
+                    tiles.append(_metric_tile("Unrealized P&L", f"${unrealized:+,.2f}", cls="good" if unrealized >= 0 else "bad"))
+                _metric_row(tiles)
 
     with st.container(border=True):
-        _card_header("Account", "Cash plus what any open positions are worth right now")
-        if account_error is not None:
-            st.caption(f"Live account data unavailable right now ({account_error}).")
-        elif account_state is not None:
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Equity", f"${account_state['current_equity']:,.0f}")
-            col2.metric("Cash", f"${account_state['cash']:,.0f}")
-            col3.metric("Options buying power", f"${account_state['options_buying_power']:,.0f}")
-            col4.metric("Positions open", f"{n_open} of {MAX_CONCURRENT_POSITIONS}")
-
-    with st.container(border=True):
-        _card_header("Today's market", "Live SPY price and the two numbers the Guard checks before opening anything")
-        if snapshot_error is not None:
-            st.caption(f"Live market data unavailable right now ({snapshot_error}).")
-        elif today_snapshot is not None:
-            s = today_snapshot
-            col1, col2, col3 = st.columns(3)
-            col1.metric("SPY spot", f"${s['spot']:.2f}")
-            col2.metric("Yesterday's move", f"{s['yesterday_move_pct']:+.2%}",
-                        help="Blocks a new trade above 2% in either direction.")
-            col3.metric("Contango (VIX3M/VIX9D)", f"{s['contango']:.3f}",
-                        help="Below its own trailing 33rd percentile means the term structure is flattening -- blocks a new trade.")
+        _section_label("Today's market")
+        if overview["market_error"] is not None:
+            st.caption(f"Live market data unavailable right now ({overview['market_error']}).")
+        elif overview["market"] is not None:
+            m = overview["market"]
+            move_blocks = abs(m["yesterday_move_pct"]) > 0.02
+            contango_blocks = m["contango_threshold"] is not None and m["contango"] < m["contango_threshold"]
+            _metric_row([
+                _metric_tile("SPY spot", f"${m['spot']:.2f}"),
+                _metric_tile("Yesterday's move", f"{m['yesterday_move_pct']:+.1%}", "Blocks a new trade above 2%.", "bad" if move_blocks else ""),
+                _metric_tile("Contango (VIX3M/VIX9D)", f"{m['contango']:.3f}", "Flattening below its own 33rd percentile.", "bad" if contango_blocks else ""),
+            ])
             blocks = []
-            if abs(s["yesterday_move_pct"]) > 0.02:
-                blocks.append(f"SPY moved {s['yesterday_move_pct']:+.1%} yesterday")
-            if s["contango_threshold"] is not None and s["contango"] < s["contango_threshold"]:
-                blocks.append(f"term structure is flattening ({s['contango']:.3f} < {s['contango_threshold']:.3f})")
-            st.caption("Would block a new trade today: " + "; ".join(blocks) + "." if blocks else "Nothing here would block a new trade today.")
+            if move_blocks:
+                blocks.append(f"SPY moved {m['yesterday_move_pct']:+.1%} yesterday (blocks above 2%)")
+            if contango_blocks:
+                blocks.append(f"term structure is flattening ({m['contango']:.3f} < {m['contango_threshold']:.3f})")
+            note_cls = "bad" if blocks else "good"
+            note_text = ("Would block a new trade today: " + "; ".join(blocks) + ".") if blocks else "Nothing here would block a new trade today."
+            st.markdown(f'<p class="card-note {note_cls}">{note_text}</p>', unsafe_allow_html=True)
 
-    with st.container(border=True):
-        _card_header("Volatility (SPY)", "Implied vs. realized -- whether selling premium is currently well paid. Bands are a reasonable first cut, not backtested.")
-        if snapshot_error is not None:
-            st.caption(f"Live market data unavailable right now ({snapshot_error}).")
-        elif today_snapshot is not None and today_snapshot["vol_ratio"] is not None:
-            ratio = today_snapshot["vol_ratio"]
-            if ratio > 1.15:
-                verdict_class, verdict_text = "good", "Rich -- selling is well compensated right now"
-            elif ratio < 0.85:
-                verdict_class, verdict_text = "bad", "Thin -- selling isn't well compensated right now"
-            else:
-                verdict_class, verdict_text = "neutral", "Fair -- normal compensation"
-            col1, col2, col3 = st.columns(3)
-            col1.metric("VIX9D (implied)", f"{today_snapshot['vix9d_decimal']:.1%}")
-            col2.metric("Realized vol (10d)", f"{today_snapshot['rv10d']:.1%}")
-            col3.metric("Ratio", f"{ratio:.2f}")
-            st.markdown(f'<span class="path-word {verdict_class}">{verdict_text}</span>', unsafe_allow_html=True)
-        else:
+        st.divider()
+        _section_label("Volatility (SPY)")
+        if overview["market_error"] is not None or overview["volatility"] is None:
             st.caption("Not enough data to compute today.")
+        else:
+            v = overview["volatility"]
+            eq_html = (
+                f'<div class="equation equation-box {v["verdict_class"]}">'
+                f'<span class="eq-item"><span class="eq-label">VIX9D</span><span class="eq-val">{v["vix9d_decimal"]:.1%}</span></span>'
+                f'<span class="eq-op">÷</span>'
+                f'<span class="eq-item"><span class="eq-label">realized (10d)</span><span class="eq-val">{v["rv10d"]:.1%}</span></span>'
+                f'<span class="eq-op">=</span>'
+                f'<span class="eq-item"><span class="eq-label">ratio</span><span class="eq-val">{v["ratio"]:.2f}</span></span>'
+                f'<span class="eq-op">&rarr;</span>'
+                f'<span class="eq-verdict {v["verdict_class"]}">{v["verdict_text"].split(":", 1)[0]}</span>'
+                f'</div>'
+            )
+            st.markdown(eq_html, unsafe_allow_html=True)
+            if v["verdict_class"] == "good":
+                threshold_text = f'above the {v["rich_threshold"]:.2f} "rich" line'
+            elif v["verdict_class"] == "bad":
+                threshold_text = f'below the {v["thin_threshold"]:.2f} "thin" line'
+            else:
+                threshold_text = f'between the {v["thin_threshold"]:.2f}-{v["rich_threshold"]:.2f} "fair" band'
+            st.markdown(f'<p class="card-note {v["verdict_class"]}">{v["verdict_text"]}: the ratio is {threshold_text}.</p>', unsafe_allow_html=True)
 
-    with st.container(border=True):
-        _card_header("Volatility forecast (research track)",
-                     "HAR-X, a separate model validated on real data (EXPERIMENT.md Exp. 14/18) -- informational only, not used by the Picker, Guard, or Reviewer above.")
+        st.divider()
+        _section_label("Volatility forecast (research track)")
         if vol_forecast_error is not None:
             st.caption(f"Forecast unavailable right now ({vol_forecast_error}).")
         elif vol_forecast is not None:
-            col1, col2 = st.columns(2)
-            col1.metric("Forecasted annualized vol", f"{vol_forecast['forecast_vol_annualized_pct']:.1f}%",
-                        help=f"As of {vol_forecast['forecast_as_of']} (walk-forward, no lookahead).")
-            col2.metric("Implied breach prob. (3% / weekly)", f"{vol_forecast['forecast_breach_prob']:.1%}")
-            st.caption(
-                "8 independent tests (strike timing, position sizing, a skip filter) all failed to convert this "
-                "forecast into a validated trading edge -- shown here as context, not a signal. See EXPERIMENT.md, "
-                "\"Volatility Track — Final Synthesis.\""
+            _metric_row([
+                _metric_tile("Forecast vol (annualized)", f"{vol_forecast['forecast_vol_annualized_pct']:.1f}%"),
+                _metric_tile("Implied breach prob. (3% / weekly)", f"{vol_forecast['forecast_breach_prob']:.1%}"),
+            ])
+            st.markdown(
+                f'<p class="card-note">HAR-X, a separate model validated on real data (EXPERIMENT.md Exp. 14/18) -- '
+                f'informational only, not used by the Picker, Guard, or Reviewer above. As of {vol_forecast["forecast_as_of"]}.</p>',
+                unsafe_allow_html=True,
             )
         else:
             st.caption("Forecast not available.")
 
     with st.container(border=True):
-        _card_header("Today's decision path", "The gates one proposal a day has to clear, in order. Evidence gate is a standing backtest fact (not recomputed daily); the rest are today's actual run.")
-
-        rows = []
-        if gate_df is None:
-            rows.append(("1. Evidence", "neutral", "not computed"))
-        elif gate_choice is None:
-            rows.append(("1. Evidence", "bad", "no cell currently clears the 2-SE bar"))
-        else:
-            rows.append(("1. Evidence", "good",
-                         f"{gate_choice['distance']:.0%} / ${gate_choice['width']:.0f} clears, cushion {gate_choice['cushion_se']:.2f} SE"))
-
-        if latest_row is None:
-            rows.append(("2. Guards", "neutral", "no decision logged today"))
-            rows.append(("3. Reviewer", "neutral", "--"))
-            rows.append(("4. Order", "neutral", "--"))
-        else:
-            guards_checked = _clean(latest_row.get("guards_checked"))
-            guards_failed = latest_row.get("guards_failed")
-            has_failures = isinstance(guards_failed, list) and len(guards_failed) > 0
-            if guards_checked is None:
-                rows.append(("2. Guards", "neutral", "not reached today"))
-            elif has_failures:
-                rows.append(("2. Guards", "bad", f"{int(guards_checked)} checked -- blocked: " + "; ".join(str(g) for g in guards_failed)))
-            else:
-                rows.append(("2. Guards", "good", f"all {int(guards_checked)} passed"))
-
-            reviewer_decision = _clean(latest_row.get("reviewer_decision"))
-            if reviewer_decision is None:
-                rows.append(("3. Reviewer", "neutral", "not reached today"))
-            else:
-                reviewer_reason = _clean(latest_row.get("reviewer_reason")) or ""
-                r_class = "good" if reviewer_decision == "APPROVE" else ("bad" if reviewer_decision == "VETO" else "neutral")
-                rows.append(("3. Reviewer", r_class, f"{reviewer_decision} -- {reviewer_reason}"))
-
-            outcome_map = {
-                "SOLD": ("good", "sent live"),
-                "DRY_RUN": ("neutral", "dry run, no order sent"),
-                "SKIPPED": ("bad", "never reached -- blocked upstream"),
-                "CLOSED": ("neutral", "position closed"),
-                "EMERGENCY_CLOSE_ORPHAN": ("bad", "emergency close"),
-            }
-            outcome = _clean(latest_row.get("outcome"))
-            o_class, o_detail = outcome_map.get(outcome, ("neutral", str(outcome) if outcome else "no decision today"))
-            rows.append(("4. Order", o_class, o_detail))
-
+        _card_header("Today's decision path", "The four gates one proposal a day has to clear, in order")
         html_rows = "".join(
-            f'<div class="path-row"><span class="path-stage">{stage}</span>'
-            f'<span class="path-word {cls}">{cls.upper() if cls != "neutral" else "--"}</span>'
-            f'<span class="path-detail">{detail}</span></div>'
-            for stage, cls, detail in rows
+            f'<div class="path-row"><span class="path-stage">{row["stage"]}</span>'
+            f'<span class="path-word {row["cls"]}">{row["cls"].upper() if row["cls"] != "neutral" else "N/A"}</span>'
+            f'<span class="path-detail">{row["detail"]}</span></div>'
+            for row in overview["decision_path"]
         )
         st.markdown(html_rows, unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # Open positions -- enriched from real broker legs + the matching
-    # audit-log row (for credit/max-loss, which the broker doesn't carry).
+    # Open positions -- overview["open_positions"] carries strikes/room/
+    # expiry/collected/max-loss; joined here to live raw broker positions
+    # for unrealized P&L, same join Vercel's app.js does client-side.
     # ------------------------------------------------------------------
-    if account_error is None and n_open > 0 and account_state is not None:
+    open_positions = overview.get("open_positions") or []
+    if open_positions:
         with st.container(border=True):
             _card_header("Open positions", "Live from Alpaca, joined to the audit log for what was collected and the max loss at entry")
-            from pipeline.options.contracts import parse_occ_symbol
+            raw_by_symbol = {}
+            if account_error is None and account_state is not None:
+                raw_by_symbol = {p.symbol: p for p in account_state["raw_positions"]}
 
-            raw_by_symbol = {p.symbol: p for p in account_state["raw_positions"]}
-            today = date.today()
-            spot = today_snapshot["spot"] if today_snapshot is not None else None
             position_rows = []
-            for spread in account_state["open_positions"]:
-                short_sym, long_sym = spread["short_symbol"], spread["long_symbol"]
-                try:
-                    short_info = parse_occ_symbol(short_sym)
-                    long_info = parse_occ_symbol(long_sym)
-                except ValueError:
-                    short_info = long_info = None
-
+            for p in open_positions:
                 unrealized = 0.0
-                for sym in (short_sym, long_sym):
-                    p = raw_by_symbol.get(sym)
-                    if p is not None and p.unrealized_pl is not None:
-                        unrealized += float(p.unrealized_pl)
-
-                if short_info is not None and spot is not None:
-                    strike, right = short_info["strike"], short_info["right"]
-                    room_pct = (spot - strike) / spot if right == "P" else (strike - spot) / spot
-                    expires_days = (short_info["expiry"] - today).days
-                    strikes_text = f"SELL ${strike:.2f}{right} / BUY ${long_info['strike']:.2f}{right}"
-                    underlying = short_info["root"]
-                else:
-                    room_pct, expires_days, strikes_text, underlying = None, None, f"{short_sym} / {long_sym}", "?"
-
+                for sym in (p["short_symbol"], p["long_symbol"]):
+                    rp = raw_by_symbol.get(sym)
+                    if rp is not None and rp.unrealized_pl is not None:
+                        unrealized += float(rp.unrealized_pl)
                 position_rows.append({
-                    "underlying": underlying,
-                    "strikes": strikes_text,
-                    "room": f"{room_pct:+.1%}" if room_pct is not None else "-",
-                    "expires": f"{expires_days}d" if expires_days is not None else "-",
-                    "qty": spread["contracts"],
-                    "collected": f"${spread['credit_per_contract'] * spread['contracts']:,.2f}",
-                    "max loss": f"${spread['max_loss_total']:,.0f}",
+                    "underlying": p["underlying"],
+                    "strikes": p["strikes"],
+                    "room": f"{p['room_pct']:+.1%}" if p["room_pct"] is not None else "N/A",
+                    "expires": f"{p['expires_days']}d" if p["expires_days"] is not None else "N/A",
+                    "qty": p["qty"],
+                    "collected": f"${p['collected']:,.2f}",
+                    "max loss": f"${p['max_loss']:,.0f}",
                     "unrealized": f"${unrealized:+,.2f}",
                 })
             st.dataframe(pd.DataFrame(position_rows), width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
-# Track record: the entire "why trust this" case in one place.
+# Track record -- same section order as public/index.html: equity curve
+# (with headline, trade statistics, and the benchmark chart un-collapsed),
+# then validation and false-trip side by side, then the evidence gate.
 # ---------------------------------------------------------------------------
 with tab_track_record:
-    if curve_error is not None:
-        st.error(f"Could not render the equity curve ({curve_error}).")
-    elif curve_df is None:
-        st.warning("Reconstruction has not been computed yet. Run `python -m pipeline.backtest.reconstruct`.")
-    else:
-        _card_header(
-            "Equity curve, 2016-2026",
-            "Cumulative P&L per contract, $ -- trade every week vs. the VIX term-structure filter. "
-            "Fees before Feb 2024 are reconstructed from VIX9D and validated per volatility quartile (EXPERIMENT.md, Exp. 12d).",
-        )
-        st.line_chart(
-            curve_df[["cum_pnl_unfiltered", "cum_pnl_filtered"]].rename(columns={
-                "cum_pnl_unfiltered": "trade every week", "cum_pnl_filtered": "VIX filter",
-            }),
-            color=["#E0796B", "#6FBF8A"],
-        )
+    errors = track_record.get("errors", {})
 
-        dd_u, dd_f = _max_dd(curve_df["cum_pnl_unfiltered"]), _max_dd(curve_df["cum_pnl_filtered"])
-        wy_u, wy_f = _worst_year(curve_df, "pnl_unfiltered"), _worst_year(curve_df, "pnl_filtered")
-        weeks_traded = int(curve_df["traded"].sum())
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Max drawdown, $/contract", f"{dd_f:.2f}", delta=f"{dd_f - dd_u:+.2f} vs. unfiltered", delta_color="inverse")
-        col2.metric("Worst year, filtered", f"{wy_f[1]:+.2f}", help=f"Year {wy_f[0]}. Unfiltered: {wy_u[1]:+.2f} in {wy_u[0]}.")
-        col3.metric("Weeks traded", f"{weeks_traded} of {len(curve_df)}")
-
-        with st.expander("SPY and cash, for shape comparison (indexed, not dollar-matched)"):
-            _card_header("SPY vs. cash, indexed to 100", "Shape comparison only -- not on the same $-per-contract basis as the chart above.")
-            st.line_chart(
-                curve_df[["spy_indexed", "cash_indexed"]].rename(columns={
-                    "spy_indexed": "SPY (indexed)", "cash_indexed": "cash @ 3%/yr (indexed)",
-                }),
-                color=["#8F8575", "#4A4438"],
-            )
-
-    st.divider()
-
-    if gate_error is not None:
-        st.error(f"Could not render the evidence gate ({gate_error}).")
-    elif gate_df is None:
-        st.warning("Evidence gate not computed yet.")
-    else:
-        _card_header("Evidence gate", "Every (distance, width) combination swept against 128 real historical weeks. A cell only ships if its win-rate cushion clears 2 standard errors above breakeven.")
-        n_survivors = int(gate_df["passes_gate"].sum())
-        if gate_choice is None:
-            st.warning("No (distance, width) combination currently clears the 2-SE evidence bar -- the system declines to trade, on purpose.")
+    with st.container(border=True):
+        if errors.get("equity_curve") is not None:
+            st.error(f"Could not render the equity curve ({errors['equity_curve']}).")
         else:
-            st.success(
-                f"Today's pick: **{gate_choice['distance']:.0%} distance, ${gate_choice['width']:.0f} width**, "
-                f"cushion **{gate_choice['cushion_se']:.2f} SE** ({n_survivors} of {len(gate_df)} combinations qualify)."
+            _card_header(
+                "Equity curve, 2016-2026",
+                "Cumulative $ per contract: trade every week vs. the VIX term-structure filter",
             )
-        with st.expander(f"See all {len(gate_df)} combinations tested"):
-            display_df = gate_df.copy()
-            display_df["distance"] = (display_df["distance"] * 100).round(0).astype(int).astype(str) + "%"
-            display_df["width"] = "$" + display_df["width"].astype(int).astype(str)
-            display_cols = ["distance", "width", "n", "win_rate", "required_win_rate", "cushion_se", "mean_net_pnl", "passes_gate"]
-            styled = display_df[display_cols].rename(columns={
-                "n": "weeks", "win_rate": "measured win rate", "required_win_rate": "breakeven win rate",
-                "cushion_se": "cushion (SE)", "mean_net_pnl": "mean P&L/contract", "passes_gate": "clears 2 SE",
-            })
-            st.dataframe(styled, width="stretch", hide_index=True)
+            if track_record.get("equity_headline"):
+                st.markdown(f'<p class="card-note">{track_record["equity_headline"]}</p>', unsafe_allow_html=True)
+
+            ec = track_record["equity_curve"]
+            curve_df = pd.DataFrame({
+                "trade every week": ec["cum_pnl_unfiltered"],
+                "VIX filter": ec["cum_pnl_filtered"],
+            }, index=pd.to_datetime(ec["dates"]))
+            st.line_chart(curve_df, color=["#E2726E", "#5FBF95"])
+
+            s = track_record["stats"]
+            _metric_row([
+                _metric_tile("Max drawdown, $/contract", f"{s['dd_filtered']:.2f}", f"{s['dd_filtered'] - s['dd_unfiltered']:+.2f} vs. unfiltered"),
+                _metric_tile("Worst year, filtered", f"{s['worst_year_filtered']['pnl']:+.2f}",
+                             f"Year {s['worst_year_filtered']['year']}. Unfiltered: {s['worst_year_unfiltered']['pnl']:+.2f} in {s['worst_year_unfiltered']['year']}."),
+                _metric_tile("Weeks traded", f"{s['weeks_traded']} of {s['weeks_total']}"),
+            ])
+
+            st.divider()
+            _section_label("Trade statistics")
+            _metric_row([
+                _metric_tile("Win rate", f"{s['win_rate']:.1%}", f"{s['n_wins']} wins, {s['n_losses']} losses", "good" if s["win_rate"] >= 0.5 else "bad"),
+                _metric_tile("Profit factor", f"{s['profit_factor']:.2f}", "Gross wins / gross losses", "good" if s["profit_factor"] >= 1 else "bad"),
+                _metric_tile("Avg win / avg loss", f"${s['avg_win']:,.2f} / ${s['avg_loss']:,.2f}", "Per traded week, $/contract"),
+                _metric_tile("Best / worst week", f"${s['best_week']:,.2f} / ${s['worst_week']:,.2f}", "Single-week extremes, $/contract"),
+            ])
+
+            st.divider()
+            _section_label("Benchmark: SPY buy-and-hold and cash")
+            bench_df = pd.DataFrame({
+                "SPY (indexed)": ec["spy_indexed"],
+                "cash @ 3%/yr (indexed)": ec["cash_indexed"],
+            }, index=pd.to_datetime(ec["dates"]))
+            st.line_chart(bench_df, color=["#8B98A0", "#45505A"])
+            st.markdown(
+                f'<p class="card-note">SPY buy-and-hold returned {s["spy_final_pct"]:+.0%} over {s["date_range"]} '
+                f'(full market exposure); cash at 3%/yr returned {s["cash_final_pct"]:+.0%}. Neither carries the same '
+                f'risk as a defined-loss options spread, so these are context, not a head-to-head with the '
+                f'${s["final_filtered"]:.2f}/contract chart above.</p>',
+                unsafe_allow_html=True,
+            )
+
+    col_validation, col_false_trip = st.columns(2)
+
+    with col_validation:
+        with st.container(border=True):
+            _card_header("Why the reconstruction can be trusted", "A per-quartile check against real market data, not just an aggregate score")
+            if errors.get("validation") is not None:
+                st.error(f"Could not compute validation ({errors['validation']}).")
+            else:
+                v = track_record["validation"]
+                all_inside = all(v["band"][0] <= q["ratio"] <= v["band"][1] for q in v["quartiles"])
+                _metric_row([
+                    _metric_tile("Correlation (real vs. modelled credit)", f"{v['correlation']:.3f}"),
+                    _metric_tile("Quartiles inside band", f"{len(v['quartiles'])} of {len(v['quartiles'])}",
+                                 f"Band: {v['band'][0]}-{v['band'][1]}", "good" if all_inside else "bad"),
+                ])
+                q_df = pd.DataFrame([{
+                    "Quartile": q["bucket"], "Weeks": q["n"], "Mean VIX9D": f"{q['vix9d_mean']:.1%}",
+                    "Real credit": f"${q['real_credit']:.2f}", "Model credit": f"${q['model_credit']:.2f}",
+                    "Model/real": f"{q['ratio']:.3f}",
+                } for q in v["quartiles"]])
+                st.dataframe(q_df, width="stretch", hide_index=True)
+
+    with col_false_trip:
+        with st.container(border=True):
+            _card_header("Do the safety guards actually work?", "How often the term-structure guard would have blocked a real, historically winning week")
+            if errors.get("false_trip") is not None:
+                st.error(f"Could not compute the false-trip test ({errors['false_trip']}).")
+            else:
+                ft = track_record["false_trip"]
+                ft_good = ft["blocked_pct"] <= ft["bar"]
+                _metric_row([
+                    _metric_tile("Blocked (aggregate)", f"{ft['blocked_pct']:.1%}", f"Bar: <={ft['bar']:.0%}", "good" if ft_good else "bad"),
+                    _metric_tile("Real winning weeks tested", str(ft["n_winners"])),
+                ])
+                r_df = pd.DataFrame([{
+                    "Regime": r["regime"], "Weeks": r["n"], "Blocked": r["blocked"], "Blocked %": f"{r['blocked_pct']:.1%}",
+                } for r in ft["by_regime"]])
+                st.dataframe(r_df, width="stretch", hide_index=True)
+
+    with st.container(border=True):
+        _card_header("Evidence gate", "Every (distance, width) combination swept against 128 real historical weeks. A cell only ships if its win-rate cushion clears 2 standard errors above breakeven.")
+        if not evidence_data["rows"]:
+            st.warning("Evidence gate not computed yet.")
+        else:
+            pick = evidence_data["current_pick"]
+            if pick is None:
+                st.warning("No (distance, width) combination currently clears the 2-SE evidence bar -- the system declines to trade, on purpose.")
+            else:
+                st.success(
+                    f"Today's pick: **{pick['distance']:.0%} distance, ${pick['width']:.0f} width**, "
+                    f"cushion **{pick['cushion_se']:.2f} SE** ({pick['n_survivors']} of {pick['n_total']} combinations qualify)."
+                )
+            with st.expander(f"See all {len(evidence_data['rows'])} combinations tested"):
+                ev_df = pd.DataFrame([{
+                    "distance": f"{r['distance']:.0%}", "width": f"${r['width']:.0f}", "weeks": r["n"],
+                    "measured win rate": f"{r['win_rate']:.1%}", "breakeven win rate": f"{r['required_win_rate']:.1%}",
+                    "cushion (SE)": f"{r['cushion_se']:.2f}", "mean P&L/contract": f"${r['mean_net_pnl']:.2f}",
+                    "clears 2 SE": "Yes" if r["passes_gate"] else "No",
+                } for r in evidence_data["rows"]])
+                st.dataframe(ev_df, width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
-# Decision log: filter chips over real outcome/guard/reviewer values, a
-# synthesized reasoning column, full audit trail one click away.
+# Decision log -- summary counts, then filter chips, then the table --
+# sourced from build_decisions() so counts and rows can't drift from the
+# public site's numbers.
 # ---------------------------------------------------------------------------
 with tab_log:
     _card_header("Decisions", "Every day the agent runs, including a day it declines to trade, gets a row here")
 
-    if log_error is not None:
-        st.error(f"Could not render the decision log ({log_error}).")
-    elif log_df is None or log_df.empty:
+    summary = decisions_data["summary"]
+    if summary["total"] == 0:
         st.write("No decisions logged yet.")
     else:
-        def _category(row) -> str:
-            outcome = row.get("outcome")
-            if outcome == "SOLD":
-                return "Traded"
-            if outcome == "DRY_RUN":
-                return "Dry run"
-            if outcome == "SKIPPED":
-                reasons = row.get("guards_failed")
-                if isinstance(reasons, list) and any(str(r).startswith("REVIEWER_VETO") for r in reasons):
-                    return "Reviewer-vetoed"
-                return "Guard-blocked"
-            return "Other"
-
-        def _reason(row) -> str:
-            if row.get("outcome") == "SOLD":
-                return f"{row.get('short_symbol')} / {row.get('long_symbol')}, {row.get('proposed_contracts')} contract(s)"
-            if row.get("outcome") == "SKIPPED":
-                reasons = row.get("guards_failed")
-                return "; ".join(str(r) for r in reasons) if isinstance(reasons, list) and reasons else ""
-            if row.get("outcome") == "CLOSED":
-                return str(row.get("close_reason", ""))
-            return ""
-
-        log_df = log_df.copy()
-        log_df["category"] = log_df.apply(_category, axis=1)
-        log_df["reason"] = log_df.apply(_reason, axis=1)
+        _metric_row([
+            _metric_tile("Total", str(summary["total"])),
+            _metric_tile("Traded", str(summary["traded"])),
+            _metric_tile("Guard-blocked", str(summary["guard_blocked"])),
+            _metric_tile("Reviewer-vetoed", str(summary["reviewer_vetoed"])),
+            _metric_tile("Dry run", str(summary["dry_run"])),
+        ])
 
         options = ["All", "Traded", "Guard-blocked", "Reviewer-vetoed", "Dry run"]
         choice = st.segmented_control("Filter", options, default="All", label_visibility="collapsed")
-        filtered = log_df if choice in (None, "All") else log_df[log_df["category"] == choice]
+        rows = decisions_data["rows"]
+        filtered = rows if choice in (None, "All") else [r for r in rows if r["category"] == choice]
 
-        recent = filtered.sort_values("timestamp", ascending=False).head(10)
-        st.dataframe(recent[["timestamp", "mode", "outcome", "reason"]], width="stretch", hide_index=True)
+        if not filtered:
+            st.write("No decisions in this category.")
+        else:
+            display_df = pd.DataFrame(filtered[:50])[["timestamp", "mode", "outcome", "reason"]]
+            st.dataframe(display_df, width="stretch", hide_index=True)
 
-        with st.expander(f"Full audit trail ({len(log_df)} rows, every field)"):
-            st.dataframe(log_df.sort_values("timestamp", ascending=False), width="stretch", hide_index=True)
+        with st.expander("Full audit trail (every field, unfiltered)"):
+            log_df = read_log()
+            if log_df.empty:
+                st.write("No decisions logged yet.")
+            else:
+                st.dataframe(log_df.sort_values("timestamp", ascending=False), width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
-# How it works: a real sequence, so numbering here encodes something true.
+# How it works -- the real 6-step pipeline, ported verbatim from
+# public/index.html's stepper so the diagram and the wording match exactly.
 # ---------------------------------------------------------------------------
 with tab_how:
-    _card_header("How it works", "Picker -> Guard -> Reviewer -> order, in order")
-    st.markdown(
-        """
-1. **Picker** -- fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion.
-2. **Guard** -- 15 hard safety limits check the proposal (liquidity, position caps, drawdown limits, a VIX term-structure filter). Any single failure blocks the trade, and none can be overridden downstream.
-3. **Reviewer** -- an AI (Gemini) may veto or shrink a Guard-approved proposal -- never raise its size, never originate one. Enforced in code, not by the prompt.
-4. **Monitor** -- every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop.
-5. **Recovery** -- an unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.
+    _card_header("How it works", "One proposal a day moves through five gates in order; Recovery watches the last two continuously")
 
-Full design rationale: `OPTIONS_SYSTEM_PLAN.md`. Full experiment log, including two retracted findings: `EXPERIMENT.md`.
-        """
+    steps = [
+        {"marker": "1", "marker_cls": "", "title": "Picker", "tag": "proposes", "info": None,
+         "body": "Fixed rules, calibrated from the ten-year backtest, propose one trade a day. No model, no discretion."},
+        {"marker": "2", "marker_cls": "bad", "title": "Guard", "tag": "15 hard limits", "info": None,
+         "body": "15 hard safety limits check the proposal. Any single failure blocks the trade, and none can be overridden downstream."},
+        {"marker": "3", "marker_cls": "accent", "title": "Reviewer", "tag": "veto / shrink only",
+         "info": "Verified live end-to-end: a real MCP account fetch plus a real Gemini call returned a genuine APPROVE decision.",
+         "body": "An AI (Gemini) may veto or shrink a Guard-approved proposal, never raise its size, never originate one. Enforced in code, not by the prompt."},
+        {"marker": "4", "marker_cls": "", "title": "Order", "tag": "to broker", "info": None,
+         "body": "Sent to the broker as a single two-legged order once both Guard and Reviewer have cleared it."},
+        {"marker": "5", "marker_cls": "", "title": "Monitor", "tag": "every 15 min", "info": None,
+         "body": "Every 15 minutes: a profit target, a forced close the day before expiry (assignment-risk protection), or a hard drawdown stop."},
+        {"marker": "&#8635;", "marker_cls": "bad", "title": "Recovery", "tag": "runs alongside Order &amp; Monitor", "info": None,
+         "body": "An unrecognized broker position or a partial fill halts trading and closes the excess risk immediately.", "parallel": True},
+    ]
+
+    lis = []
+    for s in steps:
+        parallel_cls = " step-parallel" if s.get("parallel") else ""
+        info_html = f'<button class="info-btn" type="button">?</button><span class="info-tip">{s["info"]}</span>' if s.get("info") else ""
+        lis.append(
+            f'<li class="step{parallel_cls}"><div class="step-marker {s["marker_cls"]}">{s["marker"]}</div>'
+            f'<div class="step-body"><div class="step-title">{s["title"]} <span class="step-tag">{s["tag"]}</span>{info_html}</div>'
+            f'<p>{s["body"]}</p></div></li>'
+        )
+    st.markdown(f'<ol class="stepper">{"".join(lis)}</ol>', unsafe_allow_html=True)
+
+    st.markdown(
+        '<p class="card-note">The AI is deliberately the least-trusted component here: it sits after every hard '
+        'limit has already passed, and the only actions it\'s structurally capable of are subtracting risk or '
+        'refusing. Enforced by <code>apply_reviewer_decision</code>, not by asking the prompt nicely.</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p class="card-note">Full design rationale: <code>OPTIONS_SYSTEM_PLAN.md</code>. Full experiment log, '
+        'including two retracted findings: <code>EXPERIMENT.md</code>.</p>',
+        unsafe_allow_html=True,
     )

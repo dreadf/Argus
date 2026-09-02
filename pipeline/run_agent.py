@@ -20,6 +20,7 @@ import pandas as pd
 from pipeline.audit.log import append_entry, read_log
 from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
 from pipeline.execution.orders import submit_with_retry
+from pipeline.execution.pause import is_trading_paused
 from pipeline.execution.positions import open_spread_positions
 from pipeline.execution.recovery import reconcile_positions, verify_fill_or_emergency_close
 from pipeline.options.chain import fetch_chain, get_spot
@@ -44,7 +45,7 @@ GATE_PATH = "output/data/evidence_gate_results.csv"
 # an entire trading day without ever actually looking at a trade, if its
 # first invocation happened to land before open (which a fixed-time cron
 # firing near market open easily could, on any day the open is delayed).
-_PRE_FLIGHT_SKIP_PREFIXES = ("check_market_open", "get_clock failed", "check_evidence_gate", "data/account fetch failed")
+_PRE_FLIGHT_SKIP_PREFIXES = ("check_market_open", "get_clock failed", "check_evidence_gate", "data/account fetch failed", "PAUSED_BY_ADMIN")
 
 
 def _is_real_decision(row) -> bool:
@@ -99,6 +100,13 @@ def _load_peak_equity() -> float | None:
 def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     if today is None:
         today = date.today()
+
+    pause_state = is_trading_paused()
+    if pause_state is not None:
+        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+                      "guards_failed": [f"PAUSED_BY_ADMIN: {pause_state['reason']}"]})
+        print(f"Trading paused ({pause_state['reason']}). Logged SKIP.")
+        return {"outcome": "SKIPPED", "reason": f"paused: {pause_state['reason']}"}
 
     if _already_decided_today():
         print(f"Already decided today ({today}) -- idempotent no-op, nothing re-evaluated.")
@@ -304,10 +312,11 @@ if __name__ == "__main__":
     only_preflight = pd.DataFrame([
         {"outcome": "SKIPPED", "guards_failed": ["check_market_open"]},
         {"outcome": "SKIPPED", "guards_failed": ["data/account fetch failed: simulated"]},
+        {"outcome": "SKIPPED", "guards_failed": ["PAUSED_BY_ADMIN: testing"]},
     ])
     assert not any(_is_real_decision(r) for _, r in only_preflight.iterrows()), \
         "pre-flight-only skips must not count as a real decision"
-    print("Pre-flight-only skips: correctly NOT a real decision")
+    print("Pre-flight-only skips (including a pause): correctly NOT a real decision")
 
     real_guard_block = pd.DataFrame([{"outcome": "SKIPPED", "guards_failed": ["check_credit_width_ratio: below floor"]}])
     assert any(_is_real_decision(r) for _, r in real_guard_block.iterrows()), \

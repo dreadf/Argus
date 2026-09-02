@@ -14,3 +14,4 @@ jupyter_client==8.9.1
 ipykernel==7.3.0
 google-genai==2.21.0
 yfinance==1.7.0
+pytest==8.4.1
