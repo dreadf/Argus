@@ -46,9 +46,9 @@ Our original test covered Feb 2024 onward, because that is where option price re
 
 Testing further back required knowing what the fee would have been. The answer was CBOE's **VIX9D index**, the market's own 9-day volatility measure, free since 2011 and almost exactly our tenor. We rebuilt ten years of fees, validated the rebuild against the real prices we do have, and replayed 538 weeks.
 
-**2018 lost 43% of what the entire decade earned.** One year.
+**2018 lost 41% of what the entire decade earned.** One year.
 
-The fix came from published research on volatility selling: when the VIX curve flattens or inverts, meaning the market expects more turbulence soon than later, stop selling. Skipping the worst third of weeks by that measure turned 2018 from a large loss into a small profit and **cut the worst drawdown by 77%**, at every distance, width, and cost level we tried.
+The fix came from published research on volatility selling: when the VIX curve flattens or inverts, meaning the market expects more turbulence soon than later, stop selling. Skipping the worst third of weeks by that measure turned 2018 from a large loss into a small profit and **cut the worst drawdown by 75%**, at every distance, width, and cost level we tried.
 
 **Then we tried to break that result, twice.** First, measured with skipped weeks earning cash instead of zero, the term-structure filter costs about 0.6 percentage points of annual return in exchange for roughly half the volatility and a 3x smaller drawdown, a Sharpe of 0.56 against 0.35 unfiltered. Second, and more decisively: a performance measure specifically designed to **not** be gameable by option-selling payoffs (the manipulation-proof measure of Goetzmann, Ingersoll, Spiegel & Welch, 2007 — ordinary Sharpe ratios are provably gameable by exactly this shape of strategy) reaches the same conclusion independently: the filter costs return relative to trading every week. Two different methods agreeing that this is insurance, not an edge, is stronger evidence than either alone. See [`EXPERIMENT_29_SHARPE_AUDIT.md`](EXPERIMENT_29_SHARPE_AUDIT.md).
 
@@ -56,7 +56,7 @@ The fix came from published research on volatility selling: when the VIX curve f
 
 Two caveats we would rather state than have you find:
 
-First, the rule avoided all eight of 2018's losing weeks while skipping **63%** of that year, because its threshold was calibrated on 2016-2017, the calmest stretch on record. Skipping 63% at random would dodge about five of eight. Getting all eight beats chance at roughly p = 0.03, which is suggestive on one year and nothing more.
+First, the rule avoided all five of 2018's losing weeks while skipping **63%** of that year, because its threshold was calibrated on 2016-2017, the calmest stretch on record. Skipping 63% at random would dodge about 3 of those 5. Getting all 5 beats chance at roughly **p = 0.10** (0.627^5) -- not the p = 0.03 an earlier, since-corrected count of this reconstruction implied. At p = 0.10 this is not significant at any conventional bar; the honest read is that all of 2018's protection came from one calibration decision on one year, not a result that has cleared a real statistical hurdle.
 
 Second, **take 2018 out and the filter is a wash** — 0.59 Sharpe against 0.60 unfiltered, essentially identical. Nearly all of its value comes from one year. That is what a tail hedge looks like, and excluding your worst year is a diagnostic rather than a reason to drop the protection, but it means we have exactly one observation of the event the filter exists for.
 
