@@ -35,14 +35,23 @@ def assert_no_split_artifacts(closes: pd.Series, symbol: str = "") -> None:
             f"trading day -- check the fetch used adjustment=Adjustment.SPLIT."
         )
 
-load_dotenv() # Reads the .env file
-api_key = os.getenv('ALPACA_API_KEY')
-secret_key = os.getenv('ALPACA_SECRET_KEY')
-
-# Initialize the data
-data_client = StockHistoricalDataClient(api_key, secret_key)
-
 def fetch_and_save(symbols, start_date, end_date):
+    # Credentials and the live client are constructed HERE, not at module
+    # import time -- a fresh judge clone has no .env file, and importing
+    # this module (for assert_no_split_artifacts/MAX_PLAUSIBLE_DAILY_MOVE,
+    # all tests/test_extract_guard.py actually needs) used to crash with
+    # "You must supply a method of authentication" before a single test
+    # could even collect, on every machine without real Alpaca keys on
+    # disk. `unset ALPACA_API_KEY ...` in a shell never caught this,
+    # because load_dotenv() re-reads the .env FILE regardless of what the
+    # shell's environment was unset to. Found via a real fresh-clone,
+    # fresh-venv run (2026-09-03) -- every dev machine in this session
+    # has a real .env, which is exactly why this was invisible until then.
+    load_dotenv()  # Reads the .env file
+    api_key = os.getenv('ALPACA_API_KEY')
+    secret_key = os.getenv('ALPACA_SECRET_KEY')
+    data_client = StockHistoricalDataClient(api_key, secret_key)
+
     # Request Object for Daily Bars (Open, High, Low, Close, Volume)
     # adjustment=Adjustment.ALL, not SPLIT: SPLIT alone still leaves a real
     # artifact. Alpaca's SPLIT adjustment retroactively rescales history for
