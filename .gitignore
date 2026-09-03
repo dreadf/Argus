@@ -39,6 +39,12 @@ output/audit/*.jsonl
 !output/data/raw_SPY_long.csv
 !output/data/vix9d.csv
 !output/data/vix3m.csv
+# Same blanket output/data/*.csv rule, caught proactively this time (W5,
+# before it became a "found during a stress test" incident like the three
+# above): pipeline/backtest/qqq_iwm_viability.py needs these to reproduce
+# at all. Same category -- small, public daily-close market data.
+!output/data/raw_QQQ_long.csv
+!output/data/raw_IWM_long.csv
 .vercel
 .env*
 # .env.example is a template with placeholder values only (no secrets --
