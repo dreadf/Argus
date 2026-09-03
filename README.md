@@ -30,8 +30,9 @@ contest window. `WRITEUP.md`'s "Real" section states this in full.
 The system sells insurance on the S&P 500. Each session it offers a
 contract: if SPY falls more than 3% over the next week, it pays out. Most
 weeks there is no fall and it keeps the fee. Every position is a
-defined-risk put credit spread, sized so the maximum loss is fixed before
-the trade exists.
+defined-risk put credit spread, both legs sent as a single multi-leg
+order, so the maximum loss is fixed before the trade exists and a naked
+short is structurally impossible.
 
 ## What it returns
 
