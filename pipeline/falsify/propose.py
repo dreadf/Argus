@@ -49,6 +49,16 @@ PROPOSER_MODEL = "gemini-2.5-flash"
 MAX_ITERATIONS = 5
 HYPOTHESES_LOG_PATH = "output/falsify/hypotheses.jsonl"
 
+# Pinned menu of _signal_library()'s keys -- lets a caller (e.g.
+# mcp_tools.falsify()) validate a proposed signal_name against the real
+# menu without needing real data loaded first, since load_real_data() is
+# comparatively expensive (a full reconstruction replay). _signal_library
+# asserts its own keys match this set, so the two can't silently drift.
+SIGNAL_NAMES = (
+    "contango", "contango_5w_mean", "vrp_edge", "vrp_edge_3w_mean",
+    "vrp_edge_minus_contango", "vrp_edge_zscore_13w",
+)
+
 
 def _signal_library(data: pd.DataFrame) -> dict[str, pd.Series]:
     """The fixed, pre-registered menu of candidate skip-filter signals the
@@ -57,7 +67,7 @@ def _signal_library(data: pd.DataFrame) -> dict[str, pd.Series]:
     shape, with add_filter_columns already run, is the intended real
     caller). Every entry here is a known, reviewed transform -- adding a
     new one is a code change, not something the model can do at runtime."""
-    return {
+    library = {
         "vrp_edge": data["vrp_edge"],
         "contango": data["contango"],
         "vrp_edge_minus_contango": data["vrp_edge"] - data["contango"],
@@ -66,6 +76,12 @@ def _signal_library(data: pd.DataFrame) -> dict[str, pd.Series]:
         "vrp_edge_zscore_13w": (data["vrp_edge"] - data["vrp_edge"].rolling(13, min_periods=3).mean())
         / data["vrp_edge"].rolling(13, min_periods=3).std(),
     }
+    assert set(library.keys()) == set(SIGNAL_NAMES), (
+        "_signal_library's keys drifted from the pinned SIGNAL_NAMES menu -- "
+        "update SIGNAL_NAMES too, it's what lets callers validate a proposed "
+        "signal_name without needing real data loaded first"
+    )
+    return library
 
 
 def _now() -> str:
@@ -201,15 +217,24 @@ def run_loop(data: pd.DataFrame, max_iterations: int = MAX_ITERATIONS,
     return history
 
 
-if __name__ == "__main__":
+def load_real_data() -> pd.DataFrame:
+    """Recomputes the validated reconstruction (same calibration
+    reconstruct.py uses) and returns it in the shape _signal_library() and
+    run_loop() need: date-indexed, with vrp_edge/contango/pnl columns.
+    Shared by this module's __main__ and pipeline.falsify.mcp_tools (W6),
+    so the two never load real data two different ways."""
     from pipeline.backtest.reconstruct import _load_real_flagship_weeks, calibrate_skew_multiplier
     from pipeline.backtest.vrp_measure import add_filter_columns, replay
 
-    print("Recomputing the validated reconstruction (same calibration reconstruct.py uses)...")
     real_weeks = _load_real_flagship_weeks()
     a, b = calibrate_skew_multiplier(real_weeks)
     result = replay(a, b)
-    data = add_filter_columns(result).set_index("entry")
+    return add_filter_columns(result).set_index("entry")
+
+
+if __name__ == "__main__":
+    print("Recomputing the validated reconstruction (same calibration reconstruct.py uses)...")
+    data = load_real_data()
     print(f"  {len(data)} weeks loaded, running the propose/falsify loop (max {MAX_ITERATIONS} iterations)...")
 
     history = run_loop(data)
