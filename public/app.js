@@ -455,17 +455,18 @@ function renderDecisions(decisions) {
 
   function renderTable() {
     const table = document.getElementById("decisions-table");
-    table.querySelector("thead").innerHTML = "<tr><th>Timestamp</th><th>Mode</th><th>Outcome</th><th>Reason</th></tr>";
+    table.querySelector("thead").innerHTML = "<tr><th>Timestamp</th><th>Account</th><th>Mode</th><th>Outcome</th><th>Reason</th></tr>";
     const tbody = table.querySelector("tbody");
     tbody.innerHTML = "";
     const rows = active === "All" ? decisions.rows : decisions.rows.filter((r) => r.category === active);
     if (rows.length === 0) {
-      tbody.appendChild(el("tr", {}, el("td", { colspan: "4", text: "No decisions in this category." })));
+      tbody.appendChild(el("tr", {}, el("td", { colspan: "5", text: "No decisions in this category." })));
       return;
     }
     rows.slice(0, 50).forEach((r) => {
       const tr = el("tr");
-      tr.appendChild(el("td", { text: r.timestamp || "" }));
+      tr.appendChild(el("td", { text: r.timestamp_display || r.timestamp || "" }));
+      tr.appendChild(el("td", { text: r.account_number || "unknown" }));
       tr.appendChild(el("td", { text: r.mode || "" }));
       tr.appendChild(el("td", { text: r.outcome || "" }));
       tr.appendChild(el("td", { class: "wrap", text: r.reason || "" }));

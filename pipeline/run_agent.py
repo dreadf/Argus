@@ -18,7 +18,7 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 from pipeline.audit.log import append_entry, read_log
-from pipeline.execution.broker import get_account_state, get_clock, get_trading_client
+from pipeline.execution.broker import get_account_number, get_account_state, get_clock, get_trading_client
 from pipeline.execution.orders import submit_with_retry
 from pipeline.execution.pause import is_trading_paused
 from pipeline.execution.positions import open_spread_positions
@@ -71,7 +71,16 @@ def _already_decided_today() -> bool:
     any timezone (WIB in practice). Comparing against a local `date.today()`
     would silently disagree with the log for a large chunk of every day
     (confirmed: running this near local midnight against a naive local-date
-    comparison produced two SKIPPED rows for one session instead of one)."""
+    comparison produced two SKIPPED rows for one session instead of one).
+
+    Also scoped to the CURRENT Alpaca account (matched against each row's
+    account_number), not just the date -- the audit log is one shared file
+    across whichever account .env points at, and switching accounts mid-day
+    (a real incident: a disqualified account was swapped for a compliant
+    one) would otherwise let the old account's decision silently count as
+    "already decided" for the new account, which has never actually run.
+    Rows logged before this field existed have account_number=None and are
+    treated as belonging to no account, not matched against the current one."""
     log_df = read_log()
     if log_df.empty:
         return False
@@ -81,6 +90,19 @@ def _already_decided_today() -> bool:
     log_dates = pd.to_datetime(log_df["timestamp"], utc=True).dt.date
     today_utc = datetime.now(timezone.utc).date()
     todays_rows = log_df[log_dates == today_utc]
+    if "account_number" not in todays_rows.columns:
+        # No row has ever carried this field (a log written entirely before
+        # this fix, or before this process's first-ever write) -- since we
+        # cannot confirm ANY of today's rows belong to the current account,
+        # the safe, correct read is "none of them do," not "assume they all
+        # do." Getting this backwards is exactly what silently carried an
+        # old account's decision over as the new account's on 2026-09-03.
+        return False
+    try:
+        current_account = get_account_number()
+    except Exception:
+        return False  # can't confirm which account is current -- same reasoning as above
+    todays_rows = todays_rows[todays_rows["account_number"] == current_account]
     return any(_is_real_decision(row) for _, row in todays_rows.iterrows())
 
 
@@ -101,9 +123,17 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     if today is None:
         today = date.today()
 
+    try:
+        account_number = get_account_number()
+    except Exception:
+        account_number = None  # stamped as unknown rather than blocking a run over this alone
+
+    def _log(entry: dict) -> dict:
+        return append_entry({**entry, "account_number": account_number})
+
     pause_state = is_trading_paused()
     if pause_state is not None:
-        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+        _log({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                       "guards_failed": [f"PAUSED_BY_ADMIN: {pause_state['reason']}"]})
         print(f"Trading paused ({pause_state['reason']}). Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": f"paused: {pause_state['reason']}"}
@@ -115,18 +145,18 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     try:
         clock = get_clock()
     except Exception as e:
-        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+        _log({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                       "guards_failed": [f"get_clock failed: {e}"]})
         print(f"get_clock failed ({e}). Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": f"get_clock failed: {e}"}
     if not clock["market_open"]:
-        row = append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+        row = _log({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                              "guards_failed": ["check_market_open"]})
         print(f"Market closed. Logged SKIP. Next open: {clock['next_open']}")
         return {"outcome": "SKIPPED", "reason": "market closed"}
 
     if not os.path.exists(GATE_PATH):
-        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+        _log({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                       "guards_failed": ["check_evidence_gate"]})
         print("No evidence gate computed yet. Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": "no evidence gate"}
@@ -149,7 +179,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
         exps = expiries_in_window(today, risk_cfg.MIN_DTE, risk_cfg.MAX_DTE)
         chain_df = fetch_chain(exps, spot=spot)
     except Exception as e:
-        append_entry({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
+        _log({"mode": "MANUAL" if dry_run else "AUTO", "outcome": "SKIPPED",
                       "guards_failed": [f"data/account fetch failed: {e}"]})
         print(f"Data or account fetch failed ({e}). Logged SKIP.")
         return {"outcome": "SKIPPED", "reason": f"fetch failed: {e}"}
@@ -161,7 +191,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     # position on top of unknown exposure is unsafe.
     reconcile = reconcile_positions(account["raw_positions"])
     if not reconcile["safe_to_open"]:
-        append_entry({
+        _log({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "outcome": "SKIPPED",
@@ -172,7 +202,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     proposal = select_spread(chain_df, spot, gate_df, account, today=today)
     if proposal is None:
-        append_entry({
+        _log({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "outcome": "SKIPPED", "guards_failed": ["no viable proposal from selector"],
@@ -205,7 +235,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
 
     if not guard_result["passed"]:
         reasons = [f"{f['guard']}: {f['reason']}" for f in guard_result["failed"]]
-        append_entry({
+        _log({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
@@ -227,7 +257,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     reviewed = review_proposal(proposal, guard_result)
 
     if reviewed["reviewer_vetoed"]:
-        append_entry({
+        _log({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
@@ -253,7 +283,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     order_result = submission["order_result"]
 
     if submission["status"] == "SKIPPED":
-        append_entry({
+        _log({
             "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],
@@ -282,7 +312,7 @@ def run_once(dry_run: bool = True, today: date | None = None) -> dict:
     if fill_check["halt"]:
         print(f"HALT: {fill_check['reason']}")
 
-    append_entry({
+    _log({
         "mode": "MANUAL" if dry_run else "AUTO", "spy_price": spot, "vol_forecast": rv_10d,
         "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
         "gate_distance": proposal["distance"], "gate_cushion_se": proposal["cushion_se"],

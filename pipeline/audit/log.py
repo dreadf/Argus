@@ -25,7 +25,7 @@ AUDIT_LOG_PATH = "output/audit/decisions.jsonl"
 # day the Reviewer never ran has no reviewer_* fields. Missing is not an
 # error; it's information (what didn't happen, and why).
 SCHEMA_FIELDS = [
-    "timestamp", "mode",
+    "timestamp", "mode", "account_number",
     "current_equity", "peak_equity",
     "spy_price", "vol_forecast",
     "gate_distance", "gate_cushion_se", "realized_distance",
@@ -49,6 +49,12 @@ def append_entry(entry: dict, path: str = AUDIT_LOG_PATH) -> dict:
     row = {field: entry.get(field) for field in SCHEMA_FIELDS}
     if row["timestamp"] is None:
         row["timestamp"] = datetime.now(timezone.utc).isoformat()
+    # account_number is stamped by the caller (it already has account state
+    # in hand at every point that matters), never fetched here -- append_entry
+    # must stay network-free, it's called from pre-flight paths before any
+    # account fetch happens, and a live call here once hung the entire test
+    # suite (network access is not guaranteed/fast in every environment this
+    # runs in).
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # An exclusive advisory lock around the write -- not triggerable today

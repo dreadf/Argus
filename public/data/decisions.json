@@ -1,14 +1,385 @@
 {
   "summary": {
-    "total": 4,
+    "total": 45,
     "traded": 1,
-    "guard_blocked": 2,
+    "guard_blocked": 39,
     "reviewer_vetoed": 0,
-    "dry_run": 0
+    "dry_run": 3
   },
   "rows": [
     {
+      "timestamp": "2026-09-03T21:49:07.624926+00:00",
+      "timestamp_display": "Sep 3, 2026 9:49 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "mode": "MANUAL",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T13:30:18.725217+00:00",
+      "timestamp_display": "Sep 3, 2026 1:30 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Broker holds a position the audit log doesn't recognize; blocked pending review"
+    },
+    {
+      "timestamp": "2026-09-03T13:30:08.554390+00:00",
+      "timestamp_display": "Sep 3, 2026 1:30 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "CLOSED",
+      "category": "Other",
+      "reason": "close_profit_target"
+    },
+    {
+      "timestamp": "2026-09-03T13:15:06.839329+00:00",
+      "timestamp_display": "Sep 3, 2026 1:15 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T13:00:08.689613+00:00",
+      "timestamp_display": "Sep 3, 2026 1:00 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T12:45:08.050866+00:00",
+      "timestamp_display": "Sep 3, 2026 12:45 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T12:30:10.080977+00:00",
+      "timestamp_display": "Sep 3, 2026 12:30 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T12:15:22.024306+00:00",
+      "timestamp_display": "Sep 3, 2026 12:15 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T12:00:09.071172+00:00",
+      "timestamp_display": "Sep 3, 2026 12:00 PM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T11:45:07.717087+00:00",
+      "timestamp_display": "Sep 3, 2026 11:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T11:30:07.009938+00:00",
+      "timestamp_display": "Sep 3, 2026 11:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T11:15:07.778577+00:00",
+      "timestamp_display": "Sep 3, 2026 11:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T11:00:12.107261+00:00",
+      "timestamp_display": "Sep 3, 2026 11:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T10:45:18.458091+00:00",
+      "timestamp_display": "Sep 3, 2026 10:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T10:30:09.552570+00:00",
+      "timestamp_display": "Sep 3, 2026 10:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T10:15:09.405553+00:00",
+      "timestamp_display": "Sep 3, 2026 10:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T10:00:08.046362+00:00",
+      "timestamp_display": "Sep 3, 2026 10:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T09:45:10.585560+00:00",
+      "timestamp_display": "Sep 3, 2026 9:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T09:30:07.382888+00:00",
+      "timestamp_display": "Sep 3, 2026 9:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T09:15:10.655468+00:00",
+      "timestamp_display": "Sep 3, 2026 9:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T09:00:08.358829+00:00",
+      "timestamp_display": "Sep 3, 2026 9:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T08:45:06.541874+00:00",
+      "timestamp_display": "Sep 3, 2026 8:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T08:30:08.764063+00:00",
+      "timestamp_display": "Sep 3, 2026 8:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T08:15:07.175240+00:00",
+      "timestamp_display": "Sep 3, 2026 8:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T08:00:07.690752+00:00",
+      "timestamp_display": "Sep 3, 2026 8:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T07:45:09.114044+00:00",
+      "timestamp_display": "Sep 3, 2026 7:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T07:30:09.888357+00:00",
+      "timestamp_display": "Sep 3, 2026 7:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T07:15:07.459467+00:00",
+      "timestamp_display": "Sep 3, 2026 7:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T07:00:07.261789+00:00",
+      "timestamp_display": "Sep 3, 2026 7:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T06:45:06.932339+00:00",
+      "timestamp_display": "Sep 3, 2026 6:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T06:30:09.781912+00:00",
+      "timestamp_display": "Sep 3, 2026 6:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T06:15:07.899482+00:00",
+      "timestamp_display": "Sep 3, 2026 6:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T05:15:06.501340+00:00",
+      "timestamp_display": "Sep 3, 2026 5:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T05:00:14.098065+00:00",
+      "timestamp_display": "Sep 3, 2026 5:00 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T04:45:06.546671+00:00",
+      "timestamp_display": "Sep 3, 2026 4:45 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T04:30:06.999837+00:00",
+      "timestamp_display": "Sep 3, 2026 4:30 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T04:15:06.588398+00:00",
+      "timestamp_display": "Sep 3, 2026 4:15 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-03T04:08:30.194938+00:00",
+      "timestamp_display": "Sep 3, 2026 4:08 AM UTC",
+      "account_number": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-02T19:15:06.619880+00:00",
+      "timestamp_display": "Sep 2, 2026 7:15 PM UTC",
+      "account_number": "unknown",
+      "mode": "MANUAL",
+      "outcome": "DRY_RUN",
+      "category": "Dry run",
+      "reason": ""
+    },
+    {
+      "timestamp": "2026-09-02T15:45:06.880874+00:00",
+      "timestamp_display": "Sep 2, 2026 3:45 PM UTC",
+      "account_number": "unknown",
+      "mode": "MANUAL",
+      "outcome": "DRY_RUN",
+      "category": "Dry run",
+      "reason": ""
+    },
+    {
+      "timestamp": "2026-09-02T15:15:08.194912+00:00",
+      "timestamp_display": "Sep 2, 2026 3:15 PM UTC",
+      "account_number": "unknown",
+      "mode": "MANUAL",
+      "outcome": "DRY_RUN",
+      "category": "Dry run",
+      "reason": ""
+    },
+    {
       "timestamp": "2026-09-01T17:20:30.993276+00:00",
+      "timestamp_display": "Sep 1, 2026 5:20 PM UTC",
+      "account_number": "unknown",
       "mode": "AUTO",
       "outcome": "FILLED",
       "category": "Traded",
@@ -16,6 +387,8 @@
     },
     {
       "timestamp": "2026-09-01T16:38:25.479464+00:00",
+      "timestamp_display": "Sep 1, 2026 4:38 PM UTC",
+      "account_number": "unknown",
       "mode": "AUTO",
       "outcome": "SOLD",
       "category": "Traded",
@@ -23,6 +396,8 @@
     },
     {
       "timestamp": "2026-09-01T02:45:04.955715+00:00",
+      "timestamp_display": "Sep 1, 2026 2:45 AM UTC",
+      "account_number": "unknown",
       "mode": "MANUAL",
       "outcome": "SKIPPED",
       "category": "Guard-blocked",
@@ -30,6 +405,8 @@
     },
     {
       "timestamp": "2026-08-31T09:50:43.742444+00:00",
+      "timestamp_display": "Aug 31, 2026 9:50 AM UTC",
+      "account_number": "unknown",
       "mode": "MANUAL",
       "outcome": "SKIPPED",
       "category": "Guard-blocked",

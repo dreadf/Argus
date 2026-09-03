@@ -282,6 +282,7 @@ def run_once(dry_run: bool = True, today: date | None = None, manual_close_reaso
 
         append_entry({
             "mode": "MANUAL" if dry_run else "AUTO",
+            "account_number": account.get("account_number"),
             "short_symbol": position["short_symbol"], "long_symbol": position["long_symbol"],
             "current_equity": account["current_equity"], "peak_equity": account["peak_equity"],
             "outcome": "DRY_RUN" if dry_run else "CLOSED",

@@ -127,6 +127,7 @@ def verify_fill_or_emergency_close(client, proposal: dict, dry_run: bool = True)
 
     append_entry({
         "mode": "AUTO",
+        "account_number": account.get("account_number"),
         "short_symbol": proposal["short_symbol"], "long_symbol": proposal["long_symbol"],
         "outcome": "EMERGENCY_CLOSE_ORPHAN",
         "close_reason": (

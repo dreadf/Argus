@@ -465,6 +465,15 @@ def build_decisions() -> dict:
     log_df["category"] = log_df.apply(_category, axis=1)
     log_df["reason"] = log_df.apply(_reason, axis=1)
     log_df = log_df.sort_values("timestamp", ascending=False)
+    # Human-readable alongside the raw ISO timestamp, never replacing it --
+    # the raw value stays for sorting/machine use, this is display-only.
+    log_df["timestamp_display"] = pd.to_datetime(log_df["timestamp"], utc=True).dt.strftime("%b %-d, %Y %-I:%M %p UTC")
+    # account_number didn't exist before 2026-09-03's account-switch fix --
+    # older rows genuinely don't know which account they belong to, shown
+    # as "unknown" rather than blank or a misleading guess.
+    if "account_number" not in log_df.columns:
+        log_df["account_number"] = None
+    log_df["account_number"] = log_df["account_number"].fillna("unknown")
 
     # A reprice (submit_with_retry) logs both a SOLD proposal row and a
     # FILLED confirmation row for the same pair -- one real trade, two rows.
@@ -477,7 +486,7 @@ def build_decisions() -> dict:
         "reviewer_vetoed": int((log_df["category"] == "Reviewer-vetoed").sum()),
         "dry_run": int((log_df["category"] == "Dry run").sum()),
     }
-    rows = log_df[["timestamp", "mode", "outcome", "category", "reason"]].head(200).to_dict(orient="records")
+    rows = log_df[["timestamp", "timestamp_display", "account_number", "mode", "outcome", "category", "reason"]].head(200).to_dict(orient="records")
     return {"summary": summary, "rows": [{k: _clean(v) for k, v in row.items()} for row in rows]}
 
 

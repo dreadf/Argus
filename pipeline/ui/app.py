@@ -654,7 +654,8 @@ with tab_log:
         if not filtered:
             st.write("No decisions in this category.")
         else:
-            display_df = pd.DataFrame(filtered[:50])[["timestamp", "mode", "outcome", "reason"]]
+            display_df = pd.DataFrame(filtered[:50])[["timestamp_display", "account_number", "mode", "outcome", "reason"]]
+            display_df = display_df.rename(columns={"timestamp_display": "timestamp", "account_number": "account"})
             st.dataframe(display_df, width="stretch", hide_index=True)
 
         with st.expander("Full audit trail (every field, unfiltered)"):

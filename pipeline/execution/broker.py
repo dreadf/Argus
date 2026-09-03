@@ -24,6 +24,23 @@ def get_trading_client() -> TradingClient:
     return _client
 
 
+_account_number_cache: str | None = None
+
+
+def get_account_number() -> str:
+    """Cached per-process (cron spawns a fresh process every tick, so this
+    is at most one extra API call per run). Exists so the audit log can
+    stamp every row with which account produced it -- added after a real
+    incident where switching .env mid-day to a new Alpaca account left the
+    shared log with no way to tell which account a decision belonged to,
+    and run_agent.py's _already_decided_today() silently applied the old
+    account's decision to the new account's idempotency check."""
+    global _account_number_cache
+    if _account_number_cache is None:
+        _account_number_cache = get_trading_client().get_account().account_number
+    return _account_number_cache
+
+
 def get_account_state(peak_equity: float | None = None, open_positions: list[dict] | None = None) -> dict:
     """Reads live account state into the shape pipeline.risk.guards expects.
     `peak_equity` must be supplied by the caller (loaded from the audit log
@@ -51,6 +68,7 @@ def get_account_state(peak_equity: float | None = None, open_positions: list[dic
     peak_equity = max(peak_equity, current_equity)
 
     return {
+        "account_number": account.account_number,
         "current_equity": current_equity,
         "peak_equity": peak_equity,
         "cash": float(account.cash),

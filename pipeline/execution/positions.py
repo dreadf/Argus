@@ -24,6 +24,35 @@ import pandas as pd
 from pipeline.audit.log import read_log
 
 
+def _current_account_log() -> pd.DataFrame:
+    """read_log(), scoped to whichever account .env currently points at.
+
+    The audit log is one shared file regardless of which Alpaca account is
+    configured -- switching accounts mid-day (a real incident: swapping a
+    disqualified account for a compliant one) would otherwise let the old
+    account's SOLD/CLOSED rows be read as the new account's open positions.
+    Rows logged before account_number existed, or if the account can't be
+    reached, fall back to the unscoped log rather than returning nothing."""
+    log_df = read_log()
+    if log_df.empty:
+        return log_df
+    if "account_number" not in log_df.columns:
+        # No row has ever carried this field -- since we can't confirm ANY
+        # row belongs to the current account, the safe read is "none of
+        # them do," matching run_agent.py's _already_decided_today() fix.
+        # A row genuinely open right now will have been logged AFTER this
+        # fix landed and will carry the field; only pre-fix, already-closed
+        # history is excluded here, which is the position this exists to
+        # protect against showing as open in the first place.
+        return log_df.iloc[0:0]
+    try:
+        from pipeline.execution.broker import get_account_number
+        current = get_account_number()
+    except Exception:
+        return log_df.iloc[0:0]
+    return log_df[log_df["account_number"] == current]
+
+
 def closed_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
     """The mirror of open_spread_positions(): every CLOSED row, joined back
     to its opening economics (preferring the latest FILLED row for the same
@@ -39,7 +68,7 @@ def closed_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
     coverage without saying so, exactly the failure mode this project's
     audit log already avoids by writing missing fields as null."""
     if log_df is None:
-        log_df = read_log()
+        log_df = _current_account_log()
     if log_df.empty:
         return []
 
@@ -97,7 +126,7 @@ def closed_position_stats(log_df: pd.DataFrame | None = None) -> dict:
 
 def open_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
     if log_df is None:
-        log_df = read_log()
+        log_df = _current_account_log()
     if log_df.empty:
         return []
 
