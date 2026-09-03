@@ -128,6 +128,14 @@ confirmed it. A public, read-only dashboard shows the account live. Every
 number in the falsification audit reproduces from a clean clone with no
 credentials, in about 17 seconds.
 
+**On the account itself, stated rather than left for a judge to wonder
+about:** the paper account (`PA3LRFJ9JMVX`) predates the hackathon, opened
+earlier for read-only market data access. It carried zero positions and
+zero orders before the hackathon's own start date (28 Aug 2026); every
+order on it, including the fill above, was placed during the contest
+window. We are disclosing this rather than presenting the account as newly
+created for the submission, because the second thing would not be true.
+
 ---
 
 ## Features

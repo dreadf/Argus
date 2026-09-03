@@ -235,6 +235,20 @@ except Exception as e:
 else:
     account_error = None
 
+# closed_position_stats reads only the audit log (no broker call), so it
+# has its own try/except rather than sharing account_state's -- a live
+# account fetch failing (network, rate limit) shouldn't also hide realized
+# P&L, which needs nothing but the local log file.
+closed_stats = None
+try:
+    from pipeline.execution.positions import closed_position_stats
+
+    closed_stats = closed_position_stats()
+except Exception as e:
+    closed_stats_error = str(e)
+else:
+    closed_stats_error = None
+
 vol_forecast = None
 try:
     from pipeline.vol.deliverable import decide as vol_decide
@@ -361,6 +375,30 @@ with tab_overview:
                     )
                     tiles.append(_metric_tile("Unrealized P&L", f"${unrealized:+,.2f}", cls="good" if unrealized >= 0 else "bad"))
                 _metric_row(tiles)
+
+                if closed_stats_error is not None:
+                    st.caption(f"Closed-position stats unavailable ({closed_stats_error}).")
+                elif closed_stats is not None and closed_stats["n_closed"] > 0:
+                    st.write("")
+                    realized = closed_stats["total_realized_pnl"]
+                    coverage_note = (
+                        f" ({closed_stats['n_with_pnl']} of {closed_stats['n_closed']} have a recorded P&L)"
+                        if closed_stats["n_with_pnl"] < closed_stats["n_closed"] else ""
+                    )
+                    realized_tiles = [
+                        _metric_tile("Realized P&L", f"${realized:+,.2f}", cls="good" if realized >= 0 else "bad"),
+                        _metric_tile("Closed positions", str(closed_stats["n_closed"])),
+                    ]
+                    if closed_stats["win_rate"] is not None:
+                        realized_tiles.append(_metric_tile("Win rate", f"{closed_stats['win_rate']:.0%} ({closed_stats['wins']}W/{closed_stats['losses']}L)"))
+                    _metric_row(realized_tiles)
+                    if coverage_note:
+                        st.caption(
+                            "Realized P&L is only computed for a profit-target or day-before-expiry close, "
+                            "where a live quote for both legs was already fetched at the decision moment -- "
+                            "an emergency or force-close doesn't have that, so it's left out rather than guessed."
+                            + coverage_note
+                        )
 
     with st.container(border=True):
         _section_label("Today's market")

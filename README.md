@@ -12,6 +12,8 @@ Trading-system foundation (archived, superseded by `OPTIONS_SYSTEM_PLAN.md`): [`
 
 **[stock-ten-orcin.vercel.app](https://stock-ten-orcin.vercel.app)** — read-only, live from the real paper account. It's read-only by design: a public URL that could also trigger real trades would let anyone who finds the link act on a real brokerage account. Pause/resume, force-close, and on-demand runs exist too, but only in a local admin console (`CONTROLS_ENABLED=true`, `streamlit run pipeline/ui/app.py`) that never gets deployed publicly.
 
+The account predates the hackathon (opened earlier for read-only market data), but carried zero positions and zero orders before the hackathon's own start date. Every order on it was placed during the contest window.
+
 ## Key finding so far
 
 Across a naive baseline, Logistic Regression, XGBoost, single-symbol feature ablation, a multi-symbol generalization check, a 40-stock pooled panel model, and a panel diagnostic pass, **no feature combination tested shows a robust, cross-stock predictive edge** for 5-day direction. Three results are worth singling out:

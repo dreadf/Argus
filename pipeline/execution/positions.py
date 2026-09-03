@@ -24,6 +24,77 @@ import pandas as pd
 from pipeline.audit.log import read_log
 
 
+def closed_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
+    """The mirror of open_spread_positions(): every CLOSED row, joined back
+    to its opening economics (preferring the latest FILLED row for the same
+    pair, same reprice-safe logic as above) so a closed position's realized
+    P&L can be shown alongside what it opened for and why it closed.
+
+    realized_pnl is whatever monitor.py logged at close time -- None where
+    it wasn't computable (an emergency orphan close only closes the
+    uncovered excess, not the whole spread; a manual/drawdown-halt
+    force-close never fetches a live quote before submitting). Callers must
+    handle None explicitly rather than treat it as zero -- summing a mix of
+    real numbers and silently-zeroed Nones would understate a stat's
+    coverage without saying so, exactly the failure mode this project's
+    audit log already avoids by writing missing fields as null."""
+    if log_df is None:
+        log_df = read_log()
+    if log_df.empty:
+        return []
+
+    opens = log_df[log_df["outcome"] == "SOLD"].dropna(subset=["short_symbol", "long_symbol"])
+    closes = log_df[log_df["outcome"] == "CLOSED"].dropna(subset=["short_symbol", "long_symbol"])
+    if closes.empty:
+        return []
+
+    fills = log_df[log_df["outcome"] == "FILLED"].dropna(subset=["short_symbol", "long_symbol"])
+    latest_fill_by_pair = {}
+    if not fills.empty:
+        for _, frow in fills.sort_values("timestamp").iterrows():
+            latest_fill_by_pair[(frow["short_symbol"], frow["long_symbol"])] = frow
+
+    opens_by_pair = {}
+    if not opens.empty:
+        for _, orow in opens.sort_values("timestamp").iterrows():
+            opens_by_pair[(orow["short_symbol"], orow["long_symbol"])] = orow
+
+    closed_positions = []
+    for _, crow in closes.sort_values("timestamp").iterrows():
+        pair = (crow["short_symbol"], crow["long_symbol"])
+        source = latest_fill_by_pair.get(pair, opens_by_pair.get(pair))
+        closed_positions.append(
+            {
+                "short_symbol": crow["short_symbol"],
+                "long_symbol": crow["long_symbol"],
+                "closed_at": crow["timestamp"],
+                "close_reason": crow.get("close_reason"),
+                "contracts": int(source["proposed_contracts"]) if source is not None and pd.notna(source.get("proposed_contracts")) else None,
+                "credit_per_contract": float(source["proposed_credit"]) if source is not None and pd.notna(source.get("proposed_credit")) else None,
+                "realized_pnl": float(crow["realized_pnl"]) if pd.notna(crow.get("realized_pnl")) else None,
+            }
+        )
+    return closed_positions
+
+
+def closed_position_stats(log_df: pd.DataFrame | None = None) -> dict:
+    """Aggregate stats for the UI. n_with_pnl < n_closed is the honest,
+    expected case whenever an emergency or force-close happened -- shown
+    explicitly rather than treating the gap as zero."""
+    closed = closed_spread_positions(log_df)
+    with_pnl = [c for c in closed if c["realized_pnl"] is not None]
+    total_realized_pnl = sum(c["realized_pnl"] for c in with_pnl)
+    wins = sum(1 for c in with_pnl if c["realized_pnl"] > 0)
+    return {
+        "n_closed": len(closed),
+        "n_with_pnl": len(with_pnl),
+        "total_realized_pnl": total_realized_pnl,
+        "wins": wins,
+        "losses": len(with_pnl) - wins,
+        "win_rate": wins / len(with_pnl) if with_pnl else None,
+    }
+
+
 def open_spread_positions(log_df: pd.DataFrame | None = None) -> list[dict]:
     if log_df is None:
         log_df = read_log()

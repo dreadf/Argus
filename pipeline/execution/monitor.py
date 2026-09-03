@@ -239,6 +239,28 @@ def run_once(dry_run: bool = True, today: date | None = None, manual_close_reaso
         if action_result["action"] == "hold":
             continue
 
+        # realized_pnl: only computed where we actually have a live quote
+        # for BOTH legs at the moment of the close decision (profit target
+        # and day-before-expiry both go through evaluate_position's normal
+        # mids-fetched path above). Left as None otherwise -- an emergency
+        # orphan close only closes the uncovered excess, not the whole
+        # spread, so "the spread's P&L" isn't a single number at that point;
+        # a manual/drawdown-halt force-close never fetches mids at all
+        # (see the branch above). This is an estimate at the quoted mid,
+        # not a confirmed fill price -- the market order can fill slightly
+        # off it, same caveat this project already states for entries
+        # (orders.py's own docstring: the sign is confirmed, the exact
+        # price only ever known after the fact). Guessing a number here
+        # would violate the one rule this project holds itself to hardest:
+        # never show a number nobody has verified.
+        realized_pnl = None
+        if action_result["action"] in ("close_profit_target", "close_expiry_day_rule"):
+            short_mid = mids.get(position["short_symbol"])
+            long_mid = mids.get(position["long_symbol"])
+            if short_mid is not None and long_mid is not None:
+                buyback_cost_per_share = short_mid - long_mid
+                realized_pnl = (position["credit_per_contract"] - buyback_cost_per_share * 100) * position["contracts"]
+
         if action_result["action"] == "emergency_close_orphan":
             held_side = action_result["orphan_leg"]
             symbol = position["short_symbol"] if held_side == "short" else position["long_symbol"]
@@ -265,8 +287,9 @@ def run_once(dry_run: bool = True, today: date | None = None, manual_close_reaso
             "outcome": "DRY_RUN" if dry_run else "CLOSED",
             "close_reason": action_result["action"],
             "order_id": str(order_result.id) if order_result is not None else None,
+            "realized_pnl": realized_pnl,
         })
-        closed.append({"position": position, "action": action_result["action"]})
+        closed.append({"position": position, "action": action_result["action"], "realized_pnl": realized_pnl})
 
     record_heartbeat("OK")
     return {"outcome": "OK", "closed": closed}
