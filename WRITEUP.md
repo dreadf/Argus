@@ -314,6 +314,11 @@ opened with.
 - The false-trip test needs live Alpaca credentials to run and cannot be
   reproduced from a bare clone; its result is cited from a saved artifact
   instead.
+- The 50% profit-target exit is an industry convention, not a number this
+  project backtested. The plan's own words: "we did NOT test it... this is
+  our most glaring untested number." Day-before-expiry closing and the
+  15-minute polling cadence are deliberate, reasoned choices; the exact
+  profit-taking threshold is not.
 - This is five days of live paper trading. No strategy's edge is visible
   over a single week, and this document does not claim otherwise.
 

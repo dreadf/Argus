@@ -276,45 +276,43 @@ if CONTROLS_ENABLED:
         from pipeline.execution.pause import is_trading_paused, pause_trading, resume_trading
 
         pause_state = is_trading_paused()
-        col_pause, col_run = st.columns(2)
+        col_pause, col_run, col_close = st.columns(3)
+
         with col_pause:
             if pause_state is not None:
-                st.warning(f"Trading paused: {pause_state['reason']} (since {pause_state['paused_at']})")
-                if st.button("Resume trading"):
+                if st.button("Resume trading", help=f"Paused: {pause_state['reason']} (since {pause_state['paused_at']}). Resuming lets today's evaluation happen if it hasn't yet."):
                     resume_trading()
                     st.rerun()
             else:
-                st.caption("Pausing stops tomorrow's run before it evaluates anything -- today's decision, if any, already happened.")
-                if st.button("Pause trading"):
+                if st.button("Pause trading", help="Stops the NEXT run before it evaluates anything. Today's decision, if any, already happened -- this doesn't undo it."):
                     pause_trading("paused from local admin panel")
                     st.rerun()
+
         with col_run:
-            st.caption(
-                "Runs the real decision pipeline now, LIVE -- the same Guard/Reviewer gates and the same "
-                "one-decision-per-day rule the cron uses, just triggered on demand instead of waiting for it. "
-                "A no-op if today's already decided."
-            )
-            if st.button("Run agent now (live)"):
+            if st.button("Run agent now (live)", help="Runs the real decision pipeline immediately, LIVE -- same Guards/Reviewer/one-decision-per-day rule the cron uses, just on demand. No-op if today's already decided."):
                 from pipeline.run_agent import run_once as run_agent_once
 
                 with st.spinner("Running..."):
                     result = run_agent_once(dry_run=False)
                 st.write(result)
 
-        st.write("")
-        st.markdown("**Force-close all open positions**")
-        st.caption(
-            "Closes every open spread at market immediately, through the same close path monitor.py's "
-            "hard-drawdown auto-close uses -- irreversible once submitted."
-        )
-        confirm = st.checkbox("I understand this immediately closes the real position(s) at market", key="confirm_force_close")
-        if st.button("Force-close all positions", disabled=not confirm, type="primary"):
-            from pipeline.execution.monitor import run_once as run_monitor_once
+        with col_close:
+            confirm = st.checkbox("Confirm", key="confirm_force_close", help="Required before the button below activates.")
+            if st.button(
+                "Force-close all",
+                disabled=not confirm,
+                type="primary",
+                help="Closes every open spread at market immediately, via the same path monitor.py's hard-drawdown auto-close uses. Irreversible once submitted.",
+            ):
+                from pipeline.execution.monitor import run_once as run_monitor_once
 
-            with st.spinner("Closing..."):
-                result = run_monitor_once(dry_run=False, manual_close_reason="operator requested via local admin panel")
-            st.write(result)
-            st.session_state["confirm_force_close"] = False
+                with st.spinner("Closing..."):
+                    result = run_monitor_once(dry_run=False, manual_close_reason="operator requested via local admin panel")
+                st.write(result)
+                st.session_state["confirm_force_close"] = False
+
+        if pause_state is not None:
+            st.caption(f"Paused: {pause_state['reason']} (since {pause_state['paused_at']})")
 
 if dashboard_data_error is not None:
     st.stop()
