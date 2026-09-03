@@ -32,11 +32,33 @@ from dotenv import load_dotenv
 from pipeline.options.config import DISTANCE_TARGETS, UNDERLYING, WIDTH_TARGETS
 from pipeline.options.contracts import build_occ_symbol
 
-load_dotenv()
-_option_data_client = OptionHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
-
 DATA_START = date(2024, 2, 1)  # Alpaca's expired-contract history starts here
 MAX_RETRIES = 3
+
+_option_data_client_cache: OptionHistoricalDataClient | None = None
+
+
+def _get_option_data_client() -> OptionHistoricalDataClient:
+    """Constructed lazily, on first real use, not at module import time --
+    found live (2026-09-03) when pipeline/falsify/mcp_tools.py's
+    false_trip_rate tool imported this module's _load_spy_closes (a plain
+    CSV read needing no credentials at all) and crashed in CI with "You
+    must supply a method of authentication," because the OLD module-level
+    `_option_data_client = OptionHistoricalDataClient(...)` line ran on
+    every import regardless of whether anything actually needed a live
+    client. Every dev machine in this project has a real .env, which is
+    exactly why this was invisible locally -- the same failure mode
+    pipeline/extract.py's fetch_and_save and pipeline/run_all.py already
+    hit and fixed this session, now a third instance, in a file this
+    session hadn't touched until finding it. Cached after first
+    construction so this remains a single client per process, matching
+    the old module-level global's behavior for every code path that
+    actually needs it."""
+    global _option_data_client_cache
+    if _option_data_client_cache is None:
+        load_dotenv()
+        _option_data_client_cache = OptionHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+    return _option_data_client_cache
 
 
 def _load_spy_closes(csv_path: str = "output/data/raw_SPY.csv") -> pd.Series:
@@ -93,7 +115,7 @@ def _fetch_bar_closes(symbols: list[str], on_date: date) -> dict[str, float]:
     df = None
     for attempt in range(MAX_RETRIES):
         try:
-            df = _option_data_client.get_option_bars(request).df
+            df = _get_option_data_client().get_option_bars(request).df
             break
         except Exception as e:
             wait = 5 * (attempt + 1)

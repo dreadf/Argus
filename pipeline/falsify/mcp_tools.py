@@ -91,7 +91,20 @@ def register_falsify_tools(server: FastMCP) -> None:
         FALSE_TRIP_MAX_BLOCKED_WINNERS_PCT).
 
         `guard` must be one of: "credit_width", "vol_regime",
-        "term_structure". Any other value is an error, not a guess."""
+        "term_structure". Any other value is an error, not a guess.
+
+        Validated BEFORE any import that could touch real data: importing
+        pipeline.risk.false_trip pulls in pipeline.options.vol, which
+        constructs a live Alpaca client at ITS OWN module import time
+        (same anti-pattern this session already fixed twice elsewhere,
+        found here transitively -- pipeline/options/ is outside this
+        session's territory, so it's flagged, not fixed, here). Checking
+        the guard name first means an invalid guard never pays that
+        import cost or needs credentials at all."""
+        known_guards = ("credit_width", "vol_regime", "term_structure")
+        if guard not in known_guards:
+            return {"error": f"guard {guard!r} not recognized; must be one of {sorted(known_guards)}"}
+
         from pipeline.backtest.spread_backtest import _load_spy_closes
         from pipeline.io_utils import coerce_win_column
         from pipeline.risk import false_trip as ft
@@ -101,9 +114,6 @@ def register_falsify_tools(server: FastMCP) -> None:
             "vol_regime": lambda results, spy: ft.false_trip_rate_vol_regime(results, spy, distance, width),
             "term_structure": lambda results, spy: ft.false_trip_rate_term_structure(results, distance, width),
         }
-        if guard not in dispatch:
-            return {"error": f"guard {guard!r} not recognized; must be one of {sorted(dispatch.keys())}"}
-
         results = coerce_win_column(pd.read_csv("output/data/spread_backtest_results.csv"))
         spy_closes = _load_spy_closes()
         spy_closes.index = pd.to_datetime(list(spy_closes.index))

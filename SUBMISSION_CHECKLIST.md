@@ -11,6 +11,36 @@ NOT previously tracked here at all -- CI had been failing on GitHub since at
 least ca626d6 and nobody had checked. Corrected against the actual repo state
 and a real GitHub Actions run, not just local pytest.
 
+**Fifth pass, same day, requested explicitly: attribute every remaining item
+to a session or mark it genuinely unowned, rather than leave "still open"
+ambiguous about who (if anyone) is on it.** Confirmed directly with both
+other active sessions rather than guessing from stale file state.
+
+**Live right now, as of this refresh:**
+- **CI is red on `origin/main`'s current tip** (`dd9a0b7`, run `33708454183`).
+  Cause found (stock-6c): `pipeline/backtest/spread_backtest.py` constructs
+  an `OptionHistoricalDataClient` at module import time -- same bug class as
+  the `extract.py`/`run_all.py` fixes earlier today, pre-existing in a file
+  nobody had touched until stock-6c's new W6 MCP tool imported it
+  transitively and hit it in CI (no `.env` there). Fix in progress, not
+  yet verified green. **Do not treat this submission as CI-clean until
+  the next `gh run list` shows a success on top of this fix.**
+- **stock-6c**: finishing the `spread_backtest.py` CI fix above; nothing
+  else queued after it (W3/W4/W6 done, W5 stops at the documented
+  cheap-gate finding per the user's decision, see below).
+- **stock-66**: (1) just corrected a stale `PROGRESS.md` note claiming
+  `monitor.evaluate_position`'s partial-fill orphan check was "not yet
+  fixed" -- it was actually fixed since `5534bc2` (Aug 31), the doc just
+  never caught up; added `tests/test_monitor.py` (13 tests) so this no
+  longer depends on reading the module's own `__main__` self-check to
+  verify. Not pushed yet. (2) about to add realized P&L / closed-position
+  stats to `app.py`'s Account section, checking `export_dashboard_data.py`
+  first to avoid duplicating existing computation. (3) preparing to
+  actually enable the live crontab for `run_agent.py --live` /
+  `monitor.py --live` at the user's request -- explicitly checking in
+  with both other sessions before doing it, not done yet, will come with
+  specifics before it happens.
+
 ## Resolved since the last refresh
 
 - [x] **WRITEUP.md exists and is committed.** The literal top-of-list Thursday
@@ -75,44 +105,86 @@ and a real GitHub Actions run, not just local pytest.
       real audit log's `guards_checked: 15`; the Reviewer's own prompt was
       the one place still saying 14. A factual error inside text a live LLM
       reads, not just a doc typo.
+- [x] **W3/W4/W6 done, tested, committed** (`510573c`, `ae4614e`,
+      `3472383`) -- previously tracked above as "in progress," now
+      finished. `pipeline/falsify/engine.py` (W4): a generic
+      `falsify(Hypothesis) -> Verdict` gauntlet generalizing the
+      randomization-null pattern this project had written by hand five
+      times. `pipeline/falsify/propose.py` (W3): Gemini picks from a
+      fixed, pre-registered signal menu (never a formula, never
+      eval'd/exec'd) plus a skip percentile; every attempt, killed or
+      survived, appends to `output/falsify/hypotheses.jsonl`, which
+      `trial_count.py`'s `hypotheses_ledger_count()` already reads --
+      this DOES move N again once it's actually run against real data
+      with a live Gemini key, still 31 for now (empty ledger). W6:
+      `pipeline/falsify/mcp_tools.py` + `pipeline/mcp/falsify_server.py`,
+      four tools, deliberately a SEPARATE server from
+      `reviewer_server.py` (that file is documented read-only; `falsify()`
+      here isn't). 105 fast tests (was 74), 17 slow (was 13), all
+      genuinely offline (`GEMINI_API_KEY` unset in every test -- Gemini
+      calls are always injected as a fake client).
 
 ## Still open
 
-- [ ] **Get a few more real, timestamped entries into
+Each item below is now marked **UNOWNED** (nobody is working on it, needs
+someone to pick it up if it's going to happen before Friday), **IN
+PROGRESS** (a session is actively on it, see the "Live right now" note
+above for specifics), or **NOT A CODE TASK** (real, but not something any
+session can close by editing the repo).
+
+- [ ] **UNOWNED. Get a few more real, timestamped entries into
       `pipeline/audit/log.py`'s `decisions.jsonl`** during actual market
       sessions before Friday. Currently 7 rows (was 4 two passes ago, so
-      this is progressing) -- not independently re-verified which are real
-      trading-session decisions vs. guard-blocked bounces this pass.
-- [ ] **Fold `EXPERIMENT_28_VRP.md` into `EXPERIMENT.md`** as a numbered
-      Experiment 28. Checked this pass: still no `## Experiment 28` heading
-      in `EXPERIMENT.md`, so this has not happened. Lower priority now that
-      `WRITEUP.md` links `EXPERIMENT_28_VRP.md` directly and it is committed
-      either way.
-- [ ] **"Move Experiment 21 to the top of README.md"** -- checked this pass:
-      the regime-split validation gate and false-trip test (Experiment 21's
-      substance) are present under "The two things here that are actually
-      unusual," not literally at the top. Given `WRITEUP.md` now exists and
-      leads with the falsification audit instead, whether this still matters
-      for README specifically is a call for whoever owns that file next.
-- [ ] **Double-check `.env` never ends up in a zip export, screen share, or
-      Codespaces snapshot** shown to a judge. `scripts/security_preflight.py`
-      confirms untracked/out of git history on every run (and now runs
-      cleanly from a fresh clone, per the earlier `.env.example` fix), but
-      the file still sits in plaintext in the project root on disk. Not
-      re-verified this pass.
-- [ ] **`pipeline.risk.false_trip` needs Alpaca credentials to run**, so a
-      judge cannot reproduce the false-trip test directly. Agreed workaround
-      unchanged: cite `track_record.json`'s artifact (20.3%, 25/123) instead
-      of the command. Not this session's fix to make.
-- [ ] **W3 (LLM proposes hypotheses, the falsification engine kills them) is
-      in progress**, not done -- `pipeline/falsify/engine.py` and
-      `tests/test_engine.py` appeared as untracked files during this pass
-      (10 new passing tests, fast suite now 74). Not this session's work;
-      do not describe it as finished anywhere, and note it will move the
-      DSR's trial count N again once it lands, per `trial_count.py`'s own
-      counting rule.
+      this is progressing on its own as the scheduled runs continue) --
+      not independently re-verified which are real trading-session
+      decisions vs. guard-blocked bounces this pass. Nobody is actively
+      working this; it accrues by itself if the cron keeps running,
+      faster still if stock-66's live-crontab item (above) lands.
+- [ ] **UNOWNED. Fold `EXPERIMENT_28_VRP.md` into `EXPERIMENT.md`** as a
+      numbered Experiment 28. Checked this pass: still no `## Experiment
+      28` heading in `EXPERIMENT.md`, so this has not happened, and
+      neither other session mentioned it as in progress just now. Lower
+      priority now that `WRITEUP.md` links `EXPERIMENT_28_VRP.md` directly
+      and it is committed either way -- a judge can already reach it.
+- [ ] **UNOWNED. "Move Experiment 21 to the top of README.md"** -- checked
+      this pass: the regime-split validation gate and false-trip test
+      (Experiment 21's substance) are present under "The two things here
+      that are actually unusual," not literally at the top. Given
+      `WRITEUP.md` now exists and leads with the falsification audit
+      instead, whether this still matters for README specifically is a
+      call for whoever picks it up -- neither other session claimed it
+      this pass.
+- [ ] **NOT A CODE TASK. Double-check `.env` never ends up in a zip export,
+      screen share, or Codespaces snapshot** shown to a judge.
+      `scripts/security_preflight.py` confirms untracked/out of git history
+      on every run (and now runs cleanly from a fresh clone, per the
+      earlier `.env.example` fix), but the file still sits in plaintext in
+      the project root on disk. No session can close this by editing the
+      repo -- it's operator care during the actual submission/demo, on
+      whoever is doing that.
+- [ ] **NOT A CODE TASK (by agreement). `pipeline.risk.false_trip` needs
+      Alpaca credentials to run**, so a judge cannot reproduce the
+      false-trip test directly. Agreed workaround unchanged: cite
+      `track_record.json`'s artifact (20.3%, 25/123) instead of the
+      command. Deliberately not being fixed.
+- [x] **RESOLVED AS A DECISION, not an open task. QQQ/IWM viability (W5) is
+      a documented candidate for future work, explicitly NOT implemented
+      anywhere and NOT part of this submission.** `pipeline/backtest/qqq_iwm_viability.py` runs a cheap,
+      rough gating proxy (Black-Scholes fee at trailing REALIZED vol, not
+      real option quotes; breach risk borrowed from SPY's own historical
+      crash shape, not QQQ/IWM's own) before the expensive work (live
+      option-chain strike discovery, a real historical-option-price
+      backtest, the same evidence-gate/false-trip/DSR treatment SPY got).
+      Real result, computed fresh: SPY proxy 3.29 (reference), QQQ 3.51
+      (1.07x SPY, clears the gate), IWM 2.73 (0.83x SPY, gate closed --
+      "no cell survives" for IWM at this shape, a real, honest stopping
+      point per the session plan). Decision (2026-09-03, user): stop here,
+      leave QQQ as future work rather than rush the expensive backtest
+      before Friday. Nothing about QQQ/IWM touches the live system,
+      `pipeline/ui/`, or this submission's claims -- it's a research note,
+      not a feature.
 
-## Reference: what actually ships as of `34983d1`
+## Reference: what actually ships as of `dd9a0b7`
 
 - **`WRITEUP.md`** at repo root -- the submission document itself.
 - **CI is green** (`.github/workflows/tests.yml`, confirmed via a real
