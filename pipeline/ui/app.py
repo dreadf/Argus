@@ -45,7 +45,7 @@ from scripts.export_dashboard_data import build_decisions, build_evidence, build
 
 CONTROLS_ENABLED = os.getenv("CONTROLS_ENABLED", "false").lower() in ("true", "1", "yes")
 
-st.set_page_config(page_title="Evidence Gate", page_icon="📉", layout="wide")
+st.set_page_config(page_title="Argus", page_icon="📉", layout="wide")
 
 # Design tokens matched token-for-token to public/style.css's :root block, so
 # this reads as the same product's operator view, not a different tool.
@@ -203,7 +203,7 @@ def _metric_row(tiles: list[str]) -> None:
 
 
 st.markdown(
-    f'<h1 class="page-title">Evidence Gate</h1>'
+    f'<h1 class="page-title">Argus</h1>'
     f'<span class="mode-text">{"Controls enabled, local session" if CONTROLS_ENABLED else "Read-only, public deployment"}</span>',
     unsafe_allow_html=True,
 )

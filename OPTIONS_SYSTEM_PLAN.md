@@ -180,9 +180,9 @@ Drafted early rather than Friday morning, because form fields under time pressur
 
 ## Title
 
-> **Evidence Gate**
+> **Argus**
 
-Short, specific, and names the mechanism that makes the project unusual. *(Check the form's character limit before committing.)*
+Named after Odysseus's dog. *(Check the form's character limit before committing.)*
 
 ## Short description
 
