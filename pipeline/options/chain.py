@@ -27,13 +27,45 @@ from dotenv import load_dotenv
 
 from pipeline.options.config import UNDERLYING
 
-load_dotenv()
-_api_key = os.getenv("ALPACA_API_KEY")
-_secret_key = os.getenv("ALPACA_SECRET_KEY")
+_trading_client_cache: TradingClient | None = None
+_stock_data_client_cache: StockHistoricalDataClient | None = None
+_option_data_client_cache: OptionHistoricalDataClient | None = None
 
-_trading_client = TradingClient(_api_key, _secret_key, paper=True)
-_stock_data_client = StockHistoricalDataClient(_api_key, _secret_key)
-_option_data_client = OptionHistoricalDataClient(_api_key, _secret_key)
+
+def _get_trading_client() -> TradingClient:
+    """Constructed lazily, on first real use, not at module import time --
+    found live (2026-09-03) via tests/test_monitor.py's realized_pnl tests,
+    which only need to monkeypatch fetch_option_mids and never touch a real
+    client, but `import pipeline.options.chain` alone used to construct
+    three real Alpaca clients unconditionally and crashed CI with "You must
+    supply a method of authentication." Same failure mode already fixed
+    this session in pipeline/extract.py, pipeline/run_all.py, and
+    pipeline/backtest/spread_backtest.py -- a fourth instance, in a file
+    none of those fixes touched. Cached after first construction so this
+    remains a single client per process, matching the old module-level
+    global's behavior for every code path that actually needs it."""
+    global _trading_client_cache
+    if _trading_client_cache is None:
+        load_dotenv()
+        _trading_client_cache = TradingClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"), paper=True)
+    return _trading_client_cache
+
+
+def _get_stock_data_client() -> StockHistoricalDataClient:
+    global _stock_data_client_cache
+    if _stock_data_client_cache is None:
+        load_dotenv()
+        _stock_data_client_cache = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+    return _stock_data_client_cache
+
+
+def _get_option_data_client() -> OptionHistoricalDataClient:
+    global _option_data_client_cache
+    if _option_data_client_cache is None:
+        load_dotenv()
+        _option_data_client_cache = OptionHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+    return _option_data_client_cache
+
 
 MAX_RETRIES = 3
 
@@ -51,7 +83,7 @@ def _retry(fn, description: str):
 
 def get_spot(symbol: str = UNDERLYING) -> float:
     request = StockLatestTradeRequest(symbol_or_symbols=symbol)
-    result = _retry(lambda: _stock_data_client.get_stock_latest_trade(request), "get_spot")
+    result = _retry(lambda: _get_stock_data_client().get_stock_latest_trade(request), "get_spot")
     return float(result[symbol].price)
 
 
@@ -80,7 +112,7 @@ def _fetch_contracts(
                 page_token=page_token,
             )
             result = _retry(
-                lambda r=request: _trading_client.get_option_contracts(r),
+                lambda r=request: _get_trading_client().get_option_contracts(r),
                 f"get_option_contracts({expiry}, page_token={page_token})",
             )
             for c in result.option_contracts:
@@ -115,7 +147,7 @@ def _fetch_snapshots(expiry_dates: list[date], strike_lo: float, strike_hi: floa
             strike_price_lte=str(strike_hi),
             type=ContractType.PUT,  # same default-to-calls behavior as the trading API
         )
-        result = _retry(lambda r=request: _option_data_client.get_option_chain(r), f"get_option_chain({expiry})")
+        result = _retry(lambda r=request: _get_option_data_client().get_option_chain(r), f"get_option_chain({expiry})")
         for sym, snap in result.items():
             quote = snap.latest_quote
             bid = float(quote.bid_price) if quote and quote.bid_price else None
@@ -168,7 +200,7 @@ def fetch_option_mids(symbols: list[str]) -> dict[str, float | None]:
     if not symbols:
         return {}
     request = OptionLatestQuoteRequest(symbol_or_symbols=symbols)
-    quotes = _retry(lambda: _option_data_client.get_option_latest_quote(request), "get_option_latest_quote")
+    quotes = _retry(lambda: _get_option_data_client().get_option_latest_quote(request), "get_option_latest_quote")
     mids = {}
     for sym in symbols:
         quote = quotes.get(sym)
