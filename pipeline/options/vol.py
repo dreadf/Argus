@@ -24,8 +24,22 @@ from pipeline.options.config import UNDERLYING
 
 TRADING_DAYS_PER_YEAR = 252
 
-load_dotenv()
-_stock_data_client = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+_stock_data_client_cache: StockHistoricalDataClient | None = None
+
+
+def _get_stock_data_client() -> StockHistoricalDataClient:
+    """Constructed lazily, on first real use, not at module import time --
+    the same class of bug fixed this session in pipeline/extract.py,
+    pipeline/run_all.py, pipeline/backtest/spread_backtest.py, and
+    pipeline/options/chain.py (a fifth instance, flagged by a peer
+    session's own test run rather than found independently). Every dev
+    machine has a real .env, which is exactly why this was invisible
+    locally; CI has none, by design."""
+    global _stock_data_client_cache
+    if _stock_data_client_cache is None:
+        load_dotenv()
+        _stock_data_client_cache = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
+    return _stock_data_client_cache
 
 
 def log_returns(closes: pd.Series) -> pd.Series:
@@ -60,7 +74,7 @@ def fetch_recent_closes(symbol: str = UNDERLYING, lookback_days: int = 40) -> pd
     request = StockBarsRequest(
         symbol_or_symbols=symbol, timeframe=TimeFrame.Day, start=start, end=end, feed=DataFeed.IEX
     )
-    bars = _stock_data_client.get_stock_bars(request).df
+    bars = _get_stock_data_client().get_stock_bars(request).df
     closes = bars.loc[symbol]["close"] if isinstance(bars.index, pd.MultiIndex) else bars["close"]
     return closes
 
