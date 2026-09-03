@@ -7,12 +7,23 @@ import os
 import pandas as pd
 import time
 
-load_dotenv() # Reads the .env file
-api_key = os.getenv('ALPACA_API_KEY')
-secret_key = os.getenv('ALPACA_SECRET_KEY')
-data_client = NewsClient(api_key, secret_key)
-
 CSV_PATH = 'output/data/raw_news.csv'
+
+_news_client_cache = None
+
+
+def _get_news_client():
+    """Constructed lazily, on first real use, not at module import time --
+    the same class of bug fixed this session in pipeline/extract.py,
+    pipeline/run_all.py, pipeline/backtest/spread_backtest.py,
+    pipeline/options/chain.py, and pipeline/options/vol.py. Every dev
+    machine has a real .env, which is exactly why this was invisible
+    locally; CI has none, by design."""
+    global _news_client_cache
+    if _news_client_cache is None:
+        load_dotenv()
+        _news_client_cache = NewsClient(os.getenv('ALPACA_API_KEY'), os.getenv('ALPACA_SECRET_KEY'))
+    return _news_client_cache
 
 # Discovered while testing: alpaca-py's NewsClient.get_news() already
 # paginates internall. It keeps calling the API in the background until it has
@@ -54,7 +65,7 @@ def _fetch_one_request(symbol, chunk_start, chunk_end):
     # Retry up to 3 times before giving up on this one chunk.
     for attempt in range(3):
         try:
-            result = data_client.get_news(request)
+            result = _get_news_client().get_news(request)
             return result.data['news']
         except Exception as e:
             wait = 5 * (attempt + 1)   # 5s, then 10s, then 15s
