@@ -43,25 +43,37 @@ filter is insurance, not an edge, and it shows that risk-matched to SPY's own
 volatility, this strategy loses to plain buy-and-hold at every level of risk
 aversion tested.
 
-Four independent lines of evidence, two of which argue against us, one of
-which found our own bug first. That is a stronger claim than either a clean
-win or a clean failure would have been, because nobody can copy it without
-having done the work.
+Four independent lines of evidence went into that number: two argued
+against the strategy, one of them caught the project's own bug before it
+reached a reader.
 
 ---
 
 ## Positioning
 
-Every serious entry in this space has risk gates, a drawdown halt, an audit
-log, and a dashboard. That is table stakes, not a differentiator, and most
-competing submissions in this hackathon have all four.
+Most automated trading bots publish a backtest Sharpe ratio and stop
+there. That number does not say how many strategies, parameters, or
+thresholds were tried before landing on the one that got published, so it
+is cheap to produce and hard to trust on its own. This system publishes
+both numbers instead of one: a raw Sharpe of +0.56 to +0.57, and what
+that Sharpe becomes once it is charged for the 31 things actually tried
+against this data (Deflated Sharpe Ratio, Bailey and Lopez de Prado
+2014): 0.20. Most bots do not report that correction at all.
 
-What is rare is an evidence standard that has killed four of this project's
-own five pre-registered hypotheses on its own volatility-forecasting track,
-a ten-year backtest reconstruction whose validation gate fails the build if
-it drifts, and a falsification engine that found and disclosed a bug in
-itself before anyone else could. The system that ships is the residue that
-survived all of that, not the first version that worked.
+The AI in this system can only shrink a trade or cancel it, never
+enlarge one and never place one on its own. Many bots let a model size
+or place trades directly. Here the model reviews a proposal that a fixed
+rules engine already generated and every risk guard already approved,
+and its only two powers are shrink or veto, enforced by a pure function
+with no network call in it, so the safety property holds regardless of
+what the model outputs.
+
+The risk guards are tested the same way the strategy is: each one is
+replayed against real historical winning weeks to measure how often it
+would have blocked a good trade, with a pre-committed limit that already
+forced one guard's threshold down after it was found blocking 42% of
+winners. A guard nobody has checked against the trades it would have
+prevented is a guess wearing a safety label, not a control.
 
 ---
 
@@ -160,7 +172,7 @@ created for the submission, because the second thing would not be true.
 - A falsification suite: Deflated Sharpe Ratio, Minimum Track Record
   Length, a bootstrap standard-error check, and a manipulation-proof
   performance measure, all reproducible offline
-- 64 fast unit tests (under two seconds, no credentials) plus 13 slower
+- 127 fast unit tests (under ten seconds, no credentials) plus 17 slower
   tests that reproduce every published performance figure end to end
 
 ---
@@ -337,8 +349,8 @@ opened with.
 ```
 git clone <this repo> && cd stock
 pip install -r requirements.txt
-pytest tests/           # 64 tests, under 2 seconds, no credentials, no network
-pytest tests/ -m slow   # 13 tests, reproduces every published figure end to end
+pytest tests/           # 127 tests, under 10 seconds, no credentials, no network
+pytest tests/ -m slow   # 17 tests, reproduces every published figure end to end
 python -m pipeline.falsify.audit        # the full falsification audit, ~17s
 python -m pipeline.backtest.reconstruct # the ten-year evidence reconstruction
 ```
