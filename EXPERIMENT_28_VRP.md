@@ -6,8 +6,10 @@ Experiment 21, which keeps its number since the track cross-references it throug
 file's original numbering collided with it; 28 is the next free number after the track's
 Experiment 27.)*
 
-**Status: standalone, not yet folded into EXPERIMENT.md.** Written in that file's own
-format so the fold-in is a copy-paste once its current in-progress edits land. See the
+**Status: folded into `EXPERIMENT.md` as "## Experiment 28"** (2026-09-03), which now
+carries the same content in that file's numbered log. This file remains the full
+standalone writeup (the year-by-year P&L table and interpretation in more detail);
+`EXPERIMENT.md` cross-references it rather than duplicating everything here. See the
 module docstring atop `pipeline/backtest/vrp_measure.py` for the code-level version of
 this writeup.
 
@@ -176,9 +178,11 @@ If a future pass logs it for visibility only (via `pipeline/audit/log.py`'s
 `SCHEMA_FIELDS`, which is designed for exactly this kind of deliberate addition),
 that's a small, low-risk follow-up.
 
-## What to fold into EXPERIMENT.md
+## Fold-in status
 
-This file, once the in-progress edits to EXPERIMENT.md land -- numbered as
-Experiment 28 (not 21 -- see the renumbering note at the top of this file),
-cross-referenced from the glossary entry for "volatility risk premium" if
-one doesn't already exist there.
+Done (2026-09-03) -- see `EXPERIMENT.md`'s "## Experiment 28" section, inserted
+after the Volatility Track's Final Synthesis. `pipeline/falsify/trial_count.py`'s
+`EXPERIMENT_MD_BASE_COUNT` was updated from 30 to 31 in the same pass (grep now
+counts this experiment directly) and its separate `EXPERIMENT_28_COUNT` constant
+was removed rather than left stale -- the fold-in does not change the total trial
+count N (still 31), only where Experiment 28 is counted from.

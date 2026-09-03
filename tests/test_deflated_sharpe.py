@@ -53,7 +53,7 @@ def test_total_trial_count_reads_ledger_dynamically(tmp_path):
     assert hypotheses_ledger_count(str(ledger)) == 0  # cold start, no file yet
     ledger.write_text('{"h": 1}\n{"h": 2}\n{"h": 3}\n')
     assert hypotheses_ledger_count(str(ledger)) == 3
-    assert total_trial_count(str(ledger)) == EXPERIMENT_MD_BASE_COUNT + 1 + 3
+    assert total_trial_count(str(ledger)) == EXPERIMENT_MD_BASE_COUNT + 3
 
 
 def test_hypotheses_ledger_ignores_blank_trailing_lines(tmp_path):

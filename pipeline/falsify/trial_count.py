@@ -6,12 +6,13 @@ honest as N itself, and N changes every time a new hypothesis is tested
 against this project's data.
 
 N = EXPERIMENT_MD_BASE_COUNT (pinned below, from EXPERIMENT.md's own
-    numbered headings)
-  + 1  (Experiment 28, EXPERIMENT_28_VRP.md -- renumbered from a collision
-        with EXPERIMENT.md's own Experiment 21; not yet folded into
-        EXPERIMENT.md itself, so not counted by the grep below)
-  + len(hypotheses ledger)  (every hypothesis a future W3 LLM-proposal loop
-        tests against this data; 0 until that ledger exists)
+    numbered headings -- Experiment 28 folded in 2026-09-03, see the note
+    on EXPERIMENT_MD_BASE_COUNT below; EXPERIMENT_28_VRP.md remains the
+    full standalone writeup, cross-referenced from EXPERIMENT.md, not a
+    second count of the same experiment)
+  + len(hypotheses ledger)  (every hypothesis W3's LLM-proposal loop, or
+        the falsify() MCP tool, tests against this data; 0 until either
+        actually runs against real data with a live Gemini key)
 
 Any DSR figure that leaves this repo (a pitch, a slide, a comment reply)
 must be regenerated after the most recent trial and quoted with the N it
@@ -53,21 +54,24 @@ from __future__ import annotations
 
 import os
 
-# Pinned 2026-09-03 (revised from 29 on 2026-09-02) by counting
+# Pinned 2026-09-03 (revised from 30 the same day -- Experiment 28,
+# EXPERIMENT_28_VRP.md's VRP-vs-contango measurement, folded into
+# EXPERIMENT.md as its own "## Experiment 28" section, cross-referencing
+# the standalone file rather than duplicating it) by counting
 # EXPERIMENT.md's distinct numbered headings: Experiments 0, 1, 2, 2b, 3,
 # 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-# 24, 25, 26, 27, 30 -- 30 distinct experiments (Experiment 30 added
-# 2026-09-03, see the module docstring's precedent discussion above for
-# why it counts).
+# 24, 25, 26, 27, 28, 30 -- 31 distinct experiments. The fold-in does NOT
+# change the total N (still 31: previously 30 base + 1 separate
+# EXPERIMENT_28_COUNT; now 31 base + nothing separate) -- it only moves
+# where Experiment 28 is counted FROM, so this is a bookkeeping change,
+# not a new trial.
 # (13 appears as two sub-entries, "Step 0" and "Test 13a"; counted once,
 # since both are the same numbered experiment, not two different ones.)
-# Verified: `grep -c '^#\+ Experiment ' EXPERIMENT.md` returns 32 -- that
+# Verified: `grep -c '^#\+ Experiment ' EXPERIMENT.md` returns 33 -- that
 # raw count double-counts Experiment 13's two headings and includes one
 # malformed bare "# Experiment " title-page heading that isn't a numbered
-# entry at all; 32 - 2 = 30 matches the manual count above exactly.
-EXPERIMENT_MD_BASE_COUNT = 30
-
-EXPERIMENT_28_COUNT = 1  # EXPERIMENT_28_VRP.md, standalone pending fold-in
+# entry at all; 33 - 2 = 31 matches the manual count above exactly.
+EXPERIMENT_MD_BASE_COUNT = 31
 
 HYPOTHESES_LEDGER_PATH = "output/falsify/hypotheses.jsonl"
 
@@ -87,4 +91,4 @@ def hypotheses_ledger_count(path: str = HYPOTHESES_LEDGER_PATH) -> int:
 def total_trial_count(ledger_path: str = HYPOTHESES_LEDGER_PATH) -> int:
     """The N to divide by, computed fresh every call -- never cache this
     across a process that might also be appending to the ledger."""
-    return EXPERIMENT_MD_BASE_COUNT + EXPERIMENT_28_COUNT + hypotheses_ledger_count(ledger_path)
+    return EXPERIMENT_MD_BASE_COUNT + hypotheses_ledger_count(ledger_path)

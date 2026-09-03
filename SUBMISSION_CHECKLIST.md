@@ -140,12 +140,17 @@ session can close by editing the repo).
       decisions vs. guard-blocked bounces this pass. Nobody is actively
       working this; it accrues by itself if the cron keeps running,
       faster still if stock-66's live-crontab item (above) lands.
-- [ ] **UNOWNED. Fold `EXPERIMENT_28_VRP.md` into `EXPERIMENT.md`** as a
-      numbered Experiment 28. Checked this pass: still no `## Experiment
-      28` heading in `EXPERIMENT.md`, so this has not happened, and
-      neither other session mentioned it as in progress just now. Lower
-      priority now that `WRITEUP.md` links `EXPERIMENT_28_VRP.md` directly
-      and it is committed either way -- a judge can already reach it.
+- [x] **Fold `EXPERIMENT_28_VRP.md` into `EXPERIMENT.md`, done (2026-09-03,
+      user request, stock-6c).** `## Experiment 28` now sits in
+      `EXPERIMENT.md` right after the Volatility Track's Final Synthesis,
+      condensed but same substance, cross-referencing the standalone file
+      for the full year-by-year table. `pipeline/falsify/trial_count.py`'s
+      `EXPERIMENT_MD_BASE_COUNT` moved 30 -> 31 and the now-redundant
+      separate `EXPERIMENT_28_COUNT` constant was removed in the same
+      pass -- total N is still 31, unchanged, verified via a live
+      `python -m pipeline.falsify.audit` run and the full test suite (127
+      fast, 17 slow, all still passing -- the DSR=0.2011/0.1966 headline
+      figures did not move).
 - [ ] **UNOWNED. "Move Experiment 21 to the top of README.md"** -- checked
       this pass: the regime-split validation gate and false-trip test
       (Experiment 21's substance) are present under "The two things here
