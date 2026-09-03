@@ -20,15 +20,20 @@ the link act on a real brokerage account. Pause, resume, force-close, and
 on-demand runs exist only in a local admin console (`CONTROLS_ENABLED=true`,
 `streamlit run pipeline/ui/app.py`) that never gets deployed publicly.
 
-A live filled order exists on the account: SPY 735/730 put credit spread,
-6 contracts, expiring 2026-09-11, filled at a net credit of $0.23 per
-share, cash up $137.70.
+A live filled order exists: SPY 735/730 put credit spread, 6 contracts,
+expiring 2026-09-11, filled at a net credit of $0.23 per share, cash up
+$137.70. That fill happened on account `PA3LRFJ9JMVX`, opened before this
+project noticed Alpaca's hackathon rules require a brand-new account per
+submission -- that account is disqualified from judging regardless of its
+clean history, and is offered here only as evidence the system executes
+correctly.
 
-The account predates the hackathon (opened earlier for read-only market
-data access), but carried zero positions and zero orders before the
-hackathon's own start date. Every order on it, including the fill above,
-was placed during the contest window. `WRITEUP.md`'s "Real" section
-states this in full.
+The account this submission is judged on is `PA3HWE141FA8`, created
+2026-09-03 with a $100,000 starting balance, after a real Alpaca
+restriction on new accounts for Indonesian tax residents delayed opening
+a compliant one past the official measurement window's close. It has no
+meaningful trading history from that window. `WRITEUP.md`'s "Real, and
+then a correction we found late" section states this in full.
 
 ## What the trading system does
 

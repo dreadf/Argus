@@ -132,21 +132,37 @@ correctly killed a result that a simple t-test had called significant. And
 the falsification audit itself, which found its own accounting bug before
 publishing a number.
 
-**Real.** A live filled order exists on the account: SPY 735/730 put credit
-spread, 6 contracts, expiring 2026-09-11, filled at a net credit of $0.23 per
-share, cash up $137.70. The sign convention on Alpaca's multi-leg limit
-price was unverified by the broker's own documentation until this fill
-confirmed it. A public, read-only dashboard shows the account live. Every
-number in the falsification audit reproduces from a clean clone with no
-credentials, in about 17 seconds.
+**Real, and then a correction we found late and are stating plainly.** A
+live filled order exists: SPY 735/730 put credit spread, 6 contracts,
+expiring 2026-09-11, filled at a net credit of $0.23 per share, cash up
+$137.70. The sign convention on Alpaca's multi-leg limit price was
+unverified by the broker's own documentation until this fill confirmed it.
+That fill happened on account `PA3LRFJ9JMVX`.
 
-**On the account itself, stated rather than left for a judge to wonder
-about:** the paper account (`PA3LRFJ9JMVX`) predates the hackathon, opened
-earlier for read-only market data access. It carried zero positions and
-zero orders before the hackathon's own start date (28 Aug 2026); every
-order on it, including the fill above, was placed during the contest
-window. We are disclosing this rather than presenting the account as newly
-created for the submission, because the second thing would not be true.
+That account is not the one this submission is judged on. Late in the
+contest window we read Alpaca's own hackathon rules closely enough to
+notice they require a brand-new paper account dedicated to the hackathon,
+starting at $100,000, and that reused accounts are not eligible for
+judging regardless of their trading history. `PA3LRFJ9JMVX` was created
+2026-08-14, fourteen days before the hackathon began, which disqualifies
+it under that rule even though it carried zero positions and zero orders
+before 28 Aug. Fixing this ran into a second, real constraint: Alpaca does
+not currently support new account signups for Indonesian tax residents (the
+submitter's actual residence), which delayed opening a compliant account
+until after Alpaca's own official measurement window (Monday 31 Aug 9:30am
+ET through Thursday 3 Sep close) had already ended.
+
+The account this submission is judged on is `PA3HWE141FA8`, created
+2026-09-03, $100,000 starting balance, verified via the same `get_account()`
+call used everywhere else in this project. It carries no meaningful trading
+history from the scored window, because it did not exist during it. We are
+stating this rather than letting a judge discover it, the same standard
+this document holds every other uncomfortable finding to. Alpaca's own
+hackathon FAQ states judging is not based on P&L alone and explicitly
+permits backtests and historical evidence as supporting material for the
+agent's workflow, which is what the rest of this document, and the
+`PA3LRFJ9JMVX` fill above, are offered as: proof the system executes
+correctly, not proof of an official return.
 
 ---
 
@@ -339,8 +355,12 @@ opened with.
   our most glaring untested number." Day-before-expiry closing and the
   15-minute polling cadence are deliberate, reasoned choices; the exact
   profit-taking threshold is not.
-- This is five days of live paper trading. No strategy's edge is visible
-  over a single week, and this document does not claim otherwise.
+- This is five days of live paper trading on the account that was actually
+  live during them, not the one this submission is judged on -- see the
+  "Real, and then a correction" section above. The compliant account
+  (`PA3HWE141FA8`) has no meaningful trading history from Alpaca's official
+  measurement window, because an account-eligibility mistake, then a real
+  residency restriction, delayed creating it until after that window closed.
 
 ---
 
