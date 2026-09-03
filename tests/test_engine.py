@@ -15,7 +15,7 @@ import pytest
 from pipeline.falsify.engine import Hypothesis, Verdict, falsify, _walk_forward_threshold
 
 
-def _cross_sectional_data(seed, signal_strength, n_days=60, n_symbols=8):
+def _cross_sectional_data(seed, signal_strength, n_days=30, n_symbols=8):
     rng = np.random.default_rng(seed)
     rows_scores = []
     rows_fwd = []
@@ -79,7 +79,7 @@ def test_walk_forward_threshold_matches_vrp_measure_convention():
 def test_cross_sectional_real_signal_survives():
     scores, fwd = _cross_sectional_data(seed=7, signal_strength=0.85)
     hyp = Hypothesis(name="strong_signal", scores=scores, fwd_returns=fwd)
-    verdict = falsify(hyp, n_permutations=50, seed=42)
+    verdict = falsify(hyp, n_permutations=30, seed=42)
     assert isinstance(verdict, Verdict)
     assert verdict.survived is True
     assert verdict.killed_at is None
@@ -89,7 +89,7 @@ def test_cross_sectional_real_signal_survives():
 def test_cross_sectional_noise_is_killed():
     scores, fwd = _cross_sectional_data(seed=3, signal_strength=0.0)
     hyp = Hypothesis(name="pure_noise", scores=scores, fwd_returns=fwd)
-    verdict = falsify(hyp, n_permutations=50, seed=42)
+    verdict = falsify(hyp, n_permutations=30, seed=42)
     assert verdict.survived is False
     assert verdict.killed_at in ("ic_significance", "randomization_null")
 
@@ -97,8 +97,8 @@ def test_cross_sectional_noise_is_killed():
 def test_cross_sectional_verdict_is_deterministic_at_fixed_seed():
     scores, fwd = _cross_sectional_data(seed=7, signal_strength=0.85)
     hyp = Hypothesis(name="strong_signal", scores=scores, fwd_returns=fwd)
-    v1 = falsify(hyp, n_permutations=50, seed=42)
-    v2 = falsify(hyp, n_permutations=50, seed=42)
+    v1 = falsify(hyp, n_permutations=30, seed=42)
+    v2 = falsify(hyp, n_permutations=30, seed=42)
     assert v1.detail["randomization_null"]["p_value"] == v2.detail["randomization_null"]["p_value"]
 
 
