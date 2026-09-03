@@ -20,10 +20,15 @@ the link act on a real brokerage account. Pause, resume, force-close, and
 on-demand runs exist only in a local admin console (`CONTROLS_ENABLED=true`,
 `streamlit run pipeline/ui/app.py`) that never gets deployed publicly.
 
+A live filled order exists on the account: SPY 735/730 put credit spread,
+6 contracts, expiring 2026-09-11, filled at a net credit of $0.23 per
+share, cash up $137.70.
+
 The account predates the hackathon (opened earlier for read-only market
 data access), but carried zero positions and zero orders before the
-hackathon's own start date. Every order on it was placed during the
-contest window. `WRITEUP.md`'s "Real" section states this in full.
+hackathon's own start date. Every order on it, including the fill above,
+was placed during the contest window. `WRITEUP.md`'s "Real" section
+states this in full.
 
 ## What the trading system does
 
@@ -311,6 +316,18 @@ output/
   model/                  # multi-stock comparison result tables
 raw_data_eda.ipynb        # exploratory data analysis notebook
 ```
+
+## Known limitations
+
+Stated here rather than left for a reader to find: real option price
+history covers February 2024 onward, everything before that is a modeled
+reconstruction; the crash filter's entire measured benefit concentrates
+in 2018, one event, not a distribution; the 50% profit-target exit is an
+industry convention that was never itself backtested; the false-trip test
+needs live Alpaca credentials and cannot be reproduced from a bare clone;
+and this is days of live paper trading, not evidence of an edge over any
+meaningful horizon. Full list with the reasoning behind each:
+`WRITEUP.md`'s "Known limitations" section.
 
 ## Guiding philosophy
 
