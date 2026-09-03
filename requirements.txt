@@ -1,8 +1,8 @@
 pandas==3.0.5
-numpy==2.5.2
+numpy==2.4.6
 scikit-learn==1.9.0
-scipy==1.18.0
-xgboost==3.4.1
+scipy==1.17.1
+xgboost==3.2.0
 alpaca-py==0.44.0
 alpaca-mcp-server==2.3.0
 fastmcp==3.4.7
