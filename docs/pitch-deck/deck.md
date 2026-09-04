@@ -248,8 +248,8 @@ the honest math on whether it works.</p>
     <h1>A real fill, fully disclosed</h1>
     <p class="subhead">One account proved the system fills correctly. A different account is the one judged, and we say why.</p>
     <ul class="body-list">
-      <li>The fill shown here proves the multi-leg order logic works. It's not an official return: that account was opened two weeks before the hackathon and is disqualified under Alpaca's own rules, regardless of its clean history</li>
-      <li>The account actually judged, PA3HWE141FA8, opened Sep 3 after a real signup delay and carries no trades from the scored window. We're stating that plainly rather than leaving it for a judge to find</li>
+      <li>The fill shown here proves the multi-leg order logic works. It's not an official return: that account is disqualified from judging under Alpaca's own rules, regardless of its clean history</li>
+      <li>The account actually judged, PA3HWE141FA8, carries no trading history from the scored window, because it didn't exist during it. We're stating that plainly rather than leaving it for a judge to find</li>
     </ul>
   </div>
   <div class="split-visual" style="width:100%">
@@ -271,7 +271,7 @@ the honest math on whether it works.</p>
             <div class="kpi-help">Net credit, cash up $137.70</div>
           </div>
         </div>
-        <p style="font-family:var(--font-mono);font-size:0.42em;letter-spacing:0.04em;text-transform:uppercase;color:var(--accent);margin:14px 0 0">Judged on PA3HWE141FA8 &middot; opened 2026-09-03 &middot; $100,000 starting balance</p>
+        <p style="font-family:var(--font-mono);font-size:0.42em;letter-spacing:0.04em;text-transform:uppercase;color:var(--accent);margin:14px 0 0">Judged on PA3HWE141FA8 &middot; $100,000 starting balance</p>
       </div>
     </div>
   </div>
