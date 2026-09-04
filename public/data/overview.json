@@ -2,20 +2,20 @@
   "status": {
     "cls": "bad",
     "word": "Declined to trade",
-    "rest": "check_market_open",
-    "timestamp": "2026-09-04T07:45:07.970119+00:00"
+    "rest": "check_liquidity: short leg bid-ask spread 0.20408163265306128 exceeds 15% of mid",
+    "timestamp": "2026-09-04T13:30:39.800262+00:00"
   },
   "market": {
-    "spot": 772.39,
-    "yesterday_move_pct": 0.01043613503587637,
+    "spot": 772.445,
+    "yesterday_move_pct": -0.0008084178938450037,
     "contango": 1.4914383561643838,
     "contango_threshold": 1.1199846592084532
   },
   "market_error": null,
   "volatility": {
     "vix9d_decimal": 0.1168,
-    "rv10d": 0.0841044061110051,
-    "ratio": 1.3887500714985332,
+    "rv10d": 0.08339930755901405,
+    "ratio": 1.4004912440951784,
     "verdict_class": "good",
     "verdict_text": "Rich: selling is well compensated right now",
     "rich_threshold": 1.15,
@@ -29,8 +29,8 @@
     },
     {
       "stage": "2. Guards",
-      "cls": "neutral",
-      "detail": "not reached today"
+      "cls": "bad",
+      "detail": "15 checked, blocked: check_liquidity: short leg bid-ask spread 0.20408163265306128 exceeds 15% of mid"
     },
     {
       "stage": "3. Reviewer",
@@ -48,17 +48,17 @@
     {
       "label": "Declined to trade",
       "cls": "bad",
-      "detail": "check_market_open"
+      "detail": "check_liquidity: short leg bid-ask spread 0.20408163265306128 exceeds 15% of mid"
     },
     {
       "label": "Nothing blocks a new trade",
       "cls": "good",
-      "detail": "SPY $772.39, up 1.0% from yesterday."
+      "detail": "SPY $772.45, down 0.1% from yesterday."
     },
     {
       "label": "Rich",
       "cls": "good",
-      "detail": "VIX9D 11.7% vs. realized 8.4%, ratio 1.39."
+      "detail": "VIX9D 11.7% vs. realized 8.3%, ratio 1.40."
     },
     {
       "label": "Would trade",

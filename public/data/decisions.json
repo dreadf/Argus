@@ -1,12 +1,222 @@
 {
   "summary": {
-    "total": 68,
+    "total": 89,
     "traded": 1,
-    "guard_blocked": 62,
+    "guard_blocked": 83,
     "reviewer_vetoed": 0,
     "dry_run": 3
   },
   "rows": [
+    {
+      "timestamp": "2026-09-04T13:30:39.800262+00:00",
+      "timestamp_display": "Sep 4, 2026 1:30 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "check_liquidity: short leg bid-ask spread 0.20408163265306128 exceeds 15% of mid"
+    },
+    {
+      "timestamp": "2026-09-04T13:15:08.229634+00:00",
+      "timestamp_display": "Sep 4, 2026 1:15 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T13:00:08.965323+00:00",
+      "timestamp_display": "Sep 4, 2026 1:00 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T12:45:08.605716+00:00",
+      "timestamp_display": "Sep 4, 2026 12:45 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T12:30:07.140020+00:00",
+      "timestamp_display": "Sep 4, 2026 12:30 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T12:15:07.553524+00:00",
+      "timestamp_display": "Sep 4, 2026 12:15 PM UTC",
+      "account_number": "unknown",
+      "account_display": "unknown",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Could not confirm market hours (clock check failed)"
+    },
+    {
+      "timestamp": "2026-09-04T12:00:09.224200+00:00",
+      "timestamp_display": "Sep 4, 2026 12:00 PM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T11:45:08.166979+00:00",
+      "timestamp_display": "Sep 4, 2026 11:45 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T11:30:12.533272+00:00",
+      "timestamp_display": "Sep 4, 2026 11:30 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T11:15:10.547601+00:00",
+      "timestamp_display": "Sep 4, 2026 11:15 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T11:00:06.682611+00:00",
+      "timestamp_display": "Sep 4, 2026 11:00 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T10:45:08.301588+00:00",
+      "timestamp_display": "Sep 4, 2026 10:45 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T10:30:21.950987+00:00",
+      "timestamp_display": "Sep 4, 2026 10:30 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T10:15:08.552499+00:00",
+      "timestamp_display": "Sep 4, 2026 10:15 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T09:45:06.219054+00:00",
+      "timestamp_display": "Sep 4, 2026 9:45 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T09:30:06.590156+00:00",
+      "timestamp_display": "Sep 4, 2026 9:30 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T09:15:07.030407+00:00",
+      "timestamp_display": "Sep 4, 2026 9:15 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T08:45:08.532803+00:00",
+      "timestamp_display": "Sep 4, 2026 8:45 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T08:30:07.855275+00:00",
+      "timestamp_display": "Sep 4, 2026 8:30 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T08:15:07.525264+00:00",
+      "timestamp_display": "Sep 4, 2026 8:15 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
+    {
+      "timestamp": "2026-09-04T08:00:08.179806+00:00",
+      "timestamp_display": "Sep 4, 2026 8:00 AM UTC",
+      "account_number": "PA3HWE141FA8",
+      "account_display": "PA3HWE141FA8",
+      "mode": "AUTO",
+      "outcome": "SKIPPED",
+      "category": "Guard-blocked",
+      "reason": "Market was closed"
+    },
     {
       "timestamp": "2026-09-04T07:45:07.970119+00:00",
       "timestamp_display": "Sep 4, 2026 7:45 AM UTC",

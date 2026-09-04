@@ -452,6 +452,8 @@ function renderDecisions(decisions) {
   filterBox.innerHTML = "";
   const categories = ["All", "Traded", "Guard-blocked", "Reviewer-vetoed", "Dry run"];
   let active = "All";
+  const PAGE_SIZE = 15;
+  let page = 1;
 
   function renderTable() {
     const table = document.getElementById("decisions-table");
@@ -459,11 +461,20 @@ function renderDecisions(decisions) {
     const tbody = table.querySelector("tbody");
     tbody.innerHTML = "";
     const rows = active === "All" ? decisions.rows : decisions.rows.filter((r) => r.category === active);
+    const pager = document.getElementById("decisions-pager");
+    pager.innerHTML = "";
+
     if (rows.length === 0) {
       tbody.appendChild(el("tr", {}, el("td", { colspan: "5", text: "No decisions in this category." })));
       return;
     }
-    rows.slice(0, 50).forEach((r) => {
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    page = Math.min(Math.max(1, page), totalPages);
+    const start = (page - 1) * PAGE_SIZE;
+    const pageRows = rows.slice(start, start + PAGE_SIZE);
+
+    pageRows.forEach((r) => {
       const tr = el("tr");
       tr.appendChild(el("td", { text: r.timestamp_display || r.timestamp || "" }));
       tr.appendChild(el("td", { text: r.account_display || r.account_number || "unknown" }));
@@ -472,12 +483,25 @@ function renderDecisions(decisions) {
       tr.appendChild(el("td", { class: "wrap", text: r.reason || "" }));
       tbody.appendChild(tr);
     });
+
+    const prevBtn = el("button", { class: "chip", type: "button", text: "< Prev" });
+    prevBtn.disabled = page <= 1;
+    prevBtn.addEventListener("click", () => { page -= 1; renderTable(); });
+
+    const nextBtn = el("button", { class: "chip", type: "button", text: "Next >" });
+    nextBtn.disabled = page >= totalPages;
+    nextBtn.addEventListener("click", () => { page += 1; renderTable(); });
+
+    pager.appendChild(prevBtn);
+    pager.appendChild(el("span", { class: "pager-label", text: `Page ${page} of ${totalPages} (${rows.length} rows)` }));
+    pager.appendChild(nextBtn);
   }
 
   categories.forEach((cat) => {
     const btn = el("button", { class: "chip", type: "button", "aria-pressed": cat === active ? "true" : "false", text: cat });
     btn.addEventListener("click", () => {
       active = cat;
+      page = 1;
       filterBox.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", c.textContent === cat ? "true" : "false"));
       renderTable();
     });

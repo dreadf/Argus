@@ -654,7 +654,16 @@ with tab_log:
         if not filtered:
             st.write("No decisions in this category.")
         else:
-            display_df = pd.DataFrame(filtered[:50])[["timestamp_display", "account_display", "mode", "outcome", "reason"]]
+            page_size = 15
+            total_pages = max(1, -(-len(filtered) // page_size))  # ceil div
+            page = st.number_input(
+                "Page", min_value=1, max_value=total_pages, value=1, step=1,
+                key=f"decisions_page_{choice}",
+            )
+            st.caption(f"Page {page} of {total_pages} ({len(filtered)} rows)")
+            start = (page - 1) * page_size
+            page_rows = filtered[start:start + page_size]
+            display_df = pd.DataFrame(page_rows)[["timestamp_display", "account_display", "mode", "outcome", "reason"]]
             display_df = display_df.rename(columns={"timestamp_display": "timestamp", "account_display": "account"})
             st.dataframe(display_df, width="stretch", hide_index=True)
 
