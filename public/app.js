@@ -466,7 +466,7 @@ function renderDecisions(decisions) {
     rows.slice(0, 50).forEach((r) => {
       const tr = el("tr");
       tr.appendChild(el("td", { text: r.timestamp_display || r.timestamp || "" }));
-      tr.appendChild(el("td", { text: r.account_number || "unknown" }));
+      tr.appendChild(el("td", { text: r.account_display || r.account_number || "unknown" }));
       tr.appendChild(el("td", { text: r.mode || "" }));
       tr.appendChild(el("td", { text: r.outcome || "" }));
       tr.appendChild(el("td", { class: "wrap", text: r.reason || "" }));

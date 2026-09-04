@@ -3,19 +3,19 @@
     "cls": "bad",
     "word": "Declined to trade",
     "rest": "check_market_open",
-    "timestamp": "2026-09-03T21:49:07.624926+00:00"
+    "timestamp": "2026-09-04T07:45:07.970119+00:00"
   },
   "market": {
     "spot": 772.39,
     "yesterday_move_pct": 0.01043613503587637,
-    "contango": 1.4105011933174225,
-    "contango_threshold": 1.1199300434443578
+    "contango": 1.4914383561643838,
+    "contango_threshold": 1.1199846592084532
   },
   "market_error": null,
   "volatility": {
-    "vix9d_decimal": 0.1257,
+    "vix9d_decimal": 0.1168,
     "rv10d": 0.0841044061110051,
-    "ratio": 1.4945709245493632,
+    "ratio": 1.3887500714985332,
     "verdict_class": "good",
     "verdict_text": "Rich: selling is well compensated right now",
     "rich_threshold": 1.15,
@@ -58,7 +58,7 @@
     {
       "label": "Rich",
       "cls": "good",
-      "detail": "VIX9D 12.6% vs. realized 8.4%, ratio 1.49."
+      "detail": "VIX9D 11.7% vs. realized 8.4%, ratio 1.39."
     },
     {
       "label": "Would trade",

@@ -474,6 +474,14 @@ def build_decisions() -> dict:
     if "account_number" not in log_df.columns:
         log_df["account_number"] = None
     log_df["account_number"] = log_df["account_number"].fillna("unknown")
+    # The pre-contest account is disqualified from judging (see WRITEUP.md's
+    # "Real, and then a correction we found late" section) but its rows stay
+    # in this log as real history -- labeled explicitly here so a reader
+    # scanning the table can't mistake its real fill for the account this
+    # submission is judged on.
+    log_df["account_display"] = log_df["account_number"].apply(
+        lambda a: f"{a} (disqualified, pre-contest account)" if a == "PA3LRFJ9JMVX" else a
+    )
 
     # A reprice (submit_with_retry) logs both a SOLD proposal row and a
     # FILLED confirmation row for the same pair -- one real trade, two rows.
@@ -486,7 +494,7 @@ def build_decisions() -> dict:
         "reviewer_vetoed": int((log_df["category"] == "Reviewer-vetoed").sum()),
         "dry_run": int((log_df["category"] == "Dry run").sum()),
     }
-    rows = log_df[["timestamp", "timestamp_display", "account_number", "mode", "outcome", "category", "reason"]].head(200).to_dict(orient="records")
+    rows = log_df[["timestamp", "timestamp_display", "account_number", "account_display", "mode", "outcome", "category", "reason"]].head(200).to_dict(orient="records")
     return {"summary": summary, "rows": [{k: _clean(v) for k, v in row.items()} for row in rows]}
 
 
