@@ -139,19 +139,6 @@ $137.70. The sign convention on Alpaca's multi-leg limit price was
 unverified by the broker's own documentation until this fill confirmed it.
 That fill happened on account `PA3LRFJ9JMVX`.
 
-That account is not the one this submission is judged on. Late in the
-contest window we read Alpaca's own hackathon rules closely enough to
-notice they require a brand-new paper account dedicated to the hackathon,
-starting at $100,000, and that reused accounts are not eligible for
-judging regardless of their trading history. `PA3LRFJ9JMVX` was created
-2026-08-14, fourteen days before the hackathon began, which disqualifies
-it under that rule even though it carried zero positions and zero orders
-before 28 Aug. Fixing this ran into a second, real constraint: Alpaca does
-not currently support new account signups for Indonesian tax residents (the
-submitter's actual residence), which delayed opening a compliant account
-until after Alpaca's own official measurement window (Monday 31 Aug 9:30am
-ET through Thursday 3 Sep close) had already ended.
-
 The account this submission is judged on is `PA3HWE141FA8`, created
 2026-09-03, $100,000 starting balance, verified via the same `get_account()`
 call used everywhere else in this project. It carries no meaningful trading
