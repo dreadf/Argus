@@ -452,6 +452,7 @@ function renderDecisions(decisions) {
   filterBox.innerHTML = "";
   const categories = ["All", "Traded", "Guard-blocked", "Reviewer-vetoed", "Dry run"];
   let active = "All";
+  let showPreFlight = false;
   const PAGE_SIZE = 15;
   let page = 1;
 
@@ -460,7 +461,8 @@ function renderDecisions(decisions) {
     table.querySelector("thead").innerHTML = "<tr><th>Timestamp</th><th>Account</th><th>Mode</th><th>Outcome</th><th>Reason</th></tr>";
     const tbody = table.querySelector("tbody");
     tbody.innerHTML = "";
-    const rows = active === "All" ? decisions.rows : decisions.rows.filter((r) => r.category === active);
+    let rows = active === "All" ? decisions.rows : decisions.rows.filter((r) => r.category === active);
+    if (!showPreFlight) rows = rows.filter((r) => !r.is_pre_flight);
     const pager = document.getElementById("decisions-pager");
     pager.innerHTML = "";
 
@@ -507,6 +509,20 @@ function renderDecisions(decisions) {
     });
     filterBox.appendChild(btn);
   });
+
+  const preFlightLabel = el("label", { class: "pager-label", style: "display:flex;align-items:center;gap:0.4rem;cursor:pointer;" });
+  const preFlightCheckbox = el("input", { type: "checkbox" });
+  preFlightCheckbox.addEventListener("change", () => {
+    showPreFlight = preFlightCheckbox.checked;
+    page = 1;
+    renderTable();
+  });
+  preFlightLabel.appendChild(preFlightCheckbox);
+  preFlightLabel.appendChild(document.createTextNode(
+    ` Show pre-flight skips (market closed, etc. -- ${s.pre_flight} rows, kept in the log but hidden by default)`
+  ));
+  filterBox.appendChild(preFlightLabel);
+
   renderTable();
 }
 

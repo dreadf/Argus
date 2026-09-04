@@ -30,6 +30,7 @@ import pandas as pd
 from pipeline.audit.log import read_log
 from pipeline.execution.positions import open_spread_positions
 from pipeline.options.contracts import parse_occ_symbol
+from pipeline.run_agent import _PRE_FLIGHT_SKIP_PREFIXES
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "public" / "data"
 
@@ -133,6 +134,22 @@ def _decision_path(gate_df, gate_choice, latest_row) -> list[dict]:
     o_cls, o_detail = outcome_map.get(outcome, ("neutral", str(outcome) if outcome else "no decision today"))
     rows.append({"stage": "4. Order", "cls": o_cls, "detail": o_detail})
     return rows
+
+
+def _is_pre_flight(row) -> bool:
+    """True for a SKIPPED row logged before any real per-trade evaluation ran
+    (market closed, a transient fetch failure) -- the same test run_agent.py's
+    own idempotency check uses to decide these never count as "a decision."
+    Not deleted from the log (the audit trail is append-only on purpose --
+    silently trimming rows, however boring, would undercut the one claim this
+    project makes most loudly: every decision, including every rejection, is
+    recorded), just excluded from the dashboard's decision list by default."""
+    if row.get("outcome") != "SKIPPED":
+        return False
+    reasons = row.get("guards_failed")
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    return all(any(str(r).startswith(p) for p in _PRE_FLIGHT_SKIP_PREFIXES) for r in reasons)
 
 
 def _category(row) -> str:
@@ -464,6 +481,7 @@ def build_decisions() -> dict:
     log_df = log_df.copy()
     log_df["category"] = log_df.apply(_category, axis=1)
     log_df["reason"] = log_df.apply(_reason, axis=1)
+    log_df["is_pre_flight"] = log_df.apply(_is_pre_flight, axis=1)
     log_df = log_df.sort_values("timestamp", ascending=False)
     # Human-readable alongside the raw ISO timestamp, never replacing it --
     # the raw value stays for sorting/machine use, this is display-only.
@@ -493,8 +511,9 @@ def build_decisions() -> dict:
         "guard_blocked": int((log_df["category"] == "Guard-blocked").sum()),
         "reviewer_vetoed": int((log_df["category"] == "Reviewer-vetoed").sum()),
         "dry_run": int((log_df["category"] == "Dry run").sum()),
+        "pre_flight": int(log_df["is_pre_flight"].sum()),
     }
-    rows = log_df[["timestamp", "timestamp_display", "account_number", "account_display", "mode", "outcome", "category", "reason"]].head(200).to_dict(orient="records")
+    rows = log_df[["timestamp", "timestamp_display", "account_number", "account_display", "mode", "outcome", "category", "reason", "is_pre_flight"]].head(200).to_dict(orient="records")
     return {"summary": summary, "rows": [{k: _clean(v) for k, v in row.items()} for row in rows]}
 
 

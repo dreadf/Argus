@@ -648,8 +648,14 @@ with tab_log:
 
         options = ["All", "Traded", "Guard-blocked", "Reviewer-vetoed", "Dry run"]
         choice = st.segmented_control("Filter", options, default="All", label_visibility="collapsed")
+        show_pre_flight = st.checkbox(
+            f"Show pre-flight skips (market closed, etc. -- {summary['pre_flight']} rows, "
+            "kept in the log but hidden by default)"
+        )
         rows = decisions_data["rows"]
         filtered = rows if choice in (None, "All") else [r for r in rows if r["category"] == choice]
+        if not show_pre_flight:
+            filtered = [r for r in filtered if not r.get("is_pre_flight")]
 
         if not filtered:
             st.write("No decisions in this category.")

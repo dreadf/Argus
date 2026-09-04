@@ -6,16 +6,16 @@
     "timestamp": "2026-09-04T13:30:39.800262+00:00"
   },
   "market": {
-    "spot": 772.445,
-    "yesterday_move_pct": -0.0008084178938450037,
+    "spot": 769.94,
+    "yesterday_move_pct": -0.004158501645938895,
     "contango": 1.4914383561643838,
     "contango_threshold": 1.1199846592084532
   },
   "market_error": null,
   "volatility": {
     "vix9d_decimal": 0.1168,
-    "rv10d": 0.08339930755901405,
-    "ratio": 1.4004912440951784,
+    "rv10d": 0.08694419848066125,
+    "ratio": 1.343390381889362,
     "verdict_class": "good",
     "verdict_text": "Rich: selling is well compensated right now",
     "rich_threshold": 1.15,
@@ -53,12 +53,12 @@
     {
       "label": "Nothing blocks a new trade",
       "cls": "good",
-      "detail": "SPY $772.45, down 0.1% from yesterday."
+      "detail": "SPY $769.94, down 0.4% from yesterday."
     },
     {
       "label": "Rich",
       "cls": "good",
-      "detail": "VIX9D 11.7% vs. realized 8.3%, ratio 1.40."
+      "detail": "VIX9D 11.7% vs. realized 8.7%, ratio 1.34."
     },
     {
       "label": "Would trade",
