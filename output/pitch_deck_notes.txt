@@ -1,0 +1,57 @@
+Asset sources (round 4), each downloaded and recolored to this deck's exact palette:
+- assets/icons/clipboard-check.svg, shield.svg, eye.svg, send.svg -- Lucide (lucide.dev), MIT/ISC license
+- assets/illustrations/exploring.svg -- unDraw (undraw.co), MIT license, recolored from its
+  original multi-tone palette to this deck's two-tone accent/muted scheme
+
+Speaker notes: Argus, the many-eyed guardian of Greek myth (also Odysseus's loyal dog), maps to the system's 15 backtested guards, covered on slides 6 and 10.
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+Speaker notes: framed against the category of trading bots generally, never against other hackathon entries, matching this project's established positioning style.
+
+---
+
+Speaker notes: the limit that stops the AI from ever increasing a trade is not an instruction the model could ignore, it's a plain function with no network call in it, so the limit holds regardless of what the model outputs.
+
+---
+
+
+
+---
+
+
+
+---
+
+Speaker notes: 0.20 is not a failing grade, it's an honest one, it says the edge hasn't cleared the bar for statistical proof yet and states exactly how far short it falls.
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+

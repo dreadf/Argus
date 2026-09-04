@@ -1,3 +1,15 @@
+# Local-only demo video production (Remotion project, captured data
+# snapshots, voiceover recording, rendered output). Deliberately excluded
+# by explicit user instruction -- never meant to reach the repo, unlike
+# the *.md exceptions further down which are the opposite mistake
+# (real docs wrongly caught by a blanket rule). Don't "fix" this one.
+video/
+
+# Reference/inspiration material the user dropped in the repo root for
+# Claude to study (a Canva pitch-deck template), explicitly never meant to
+# ship -- not the user's own work, no license to redistribute it.
+Black Brown and White Gradient Modern Business Pitch Deck Presentation.pdf
+
 venv/
 .env
 __pycache__/
@@ -23,7 +35,11 @@ output/audit/*.jsonl
 !RESEARCH_pooling_vs_individual.md
 !EXPERIMENT_28_VRP.md
 !EXPERIMENT_29_SHARPE_AUDIT.md
-!SUBMISSION_CHECKLIST.md
+# SUBMISSION_CHECKLIST.md is internal multi-session coordination (who owns
+# what, CI status pings), not research narrative -- deliberately excluded
+# from the public repo even though the *.md blanket rule below would allow
+# it back in. Already-tracked from an earlier commit, so removing it here
+# also needs `git rm --cached` to actually stop tracking it.
 # WRITEUP.md is the actual hackathon submission document -- caught silently
 # by the same blanket *.md rule that already hid EXPERIMENT_28_VRP.md,
 # SUBMISSION_CHECKLIST.md, and three reproducibility CSVs before it. Found
@@ -56,6 +72,23 @@ output/audit/*.jsonl
 # .env.local (real values) correctly stay ignored -- only the template is
 # exempted here.
 !.env.example
+# Same blanket *.md rule, seventh instance: it only exempts specific
+# root-level filenames, so anything under docs/ was silently swallowed --
+# docs/demo-script.md existed on disk with a clean `git status` the whole
+# time. Exempting the directory rather than one more filename, so future
+# docs/ files don't repeat this.
+!docs/
+!docs/*.md
+# Eighth instance of the same trap, found immediately: `docs/*.md` only
+# matches files directly inside docs/, not a subdirectory -- docs/pitch-deck/deck.md
+# was still silently swallowed. `**` crosses directory boundaries.
+!docs/**/*.md
+# docs/pitch-deck-plan.md is meta-planning for how the deck itself was
+# designed (layout research, template choices), not part of the trading
+# system's research story -- excluded even though the exception above
+# would otherwise let it through. Never committed, so no `git rm --cached`
+# needed for this one.
+docs/pitch-deck-plan.md
 
 # Runtime-generated bot artifacts that predate any rule matching their
 # extension (output/audit/*.jsonl and output/data/*.csv were already

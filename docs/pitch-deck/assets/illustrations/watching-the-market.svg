@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" width="480" height="480">
+  <!-- Hand-authored for this deck (round 6/7): the Argus "watchful eye" over a rising market
+       chart. Flat two-tone fills only (accent teal + muted grays from theme.css), no gradients,
+       matching this deck's established recolor palette exactly. -->
+  <path d="M90,178 Q240,68 390,178 Q240,288 90,178 Z" fill="#1D252A" stroke="#2A3238" stroke-width="2"/>
+  <circle cx="240" cy="178" r="58" fill="#4FBDBA"/>
+  <circle cx="240" cy="178" r="22" fill="#0F1417"/>
+  <circle cx="230" cy="166" r="8" fill="#E7ECEF"/>
+
+  <line x1="60" y1="420" x2="420" y2="420" stroke="#2A3238" stroke-width="2"/>
+
+  <rect x="90" y="360" width="44" height="60" rx="3" fill="#2A3238"/>
+  <rect x="150" y="330" width="44" height="90" rx="3" fill="#2A3238"/>
+  <rect x="210" y="350" width="44" height="70" rx="3" fill="#2A3238"/>
+  <rect x="270" y="300" width="44" height="120" rx="3" fill="#2A3238"/>
+  <rect x="330" y="270" width="44" height="150" rx="3" fill="#2A3238"/>
+
+  <polygon points="112,360 172,330 232,350 292,300 352,270 352,420 112,420"
+    fill="#4FBDBA" fill-opacity="0.08"/>
+  <polyline points="112,360 172,330 232,350 292,300 352,270"
+    fill="none" stroke="#4FBDBA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="112" cy="360" r="6" fill="#4FBDBA"/>
+  <circle cx="172" cy="330" r="6" fill="#4FBDBA"/>
+  <circle cx="232" cy="350" r="6" fill="#4FBDBA"/>
+  <circle cx="292" cy="300" r="6" fill="#4FBDBA"/>
+  <circle cx="352" cy="270" r="6" fill="#4FBDBA"/>
+</svg>
