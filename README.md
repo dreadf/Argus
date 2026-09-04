@@ -28,6 +28,9 @@ submission -- that account is disqualified from judging regardless of its
 clean history, and is offered here only as evidence the system executes
 correctly.
 
+The account this submission is judged on is `PA3HWE141FA8`, created
+2026-09-03 with a $100,000 starting balance.
+
 ## What the trading system does
 
 The system sells insurance on the S&P 500. Each session it offers a
