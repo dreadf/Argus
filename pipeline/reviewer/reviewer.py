@@ -25,7 +25,7 @@ from google import genai
 
 from pipeline.mcp.reviewer_server import aclose_reviewer_server, build_reviewer_server
 
-REVIEWER_MODEL = "gemini-2.5-flash"
+REVIEWER_MODEL = "gemini-3.6-flash"
 
 VALID_DECISIONS = {"APPROVE", "SHRINK", "VETO"}
 

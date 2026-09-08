@@ -45,7 +45,7 @@ import pandas as pd
 
 from pipeline.falsify.engine import Hypothesis, falsify
 
-PROPOSER_MODEL = "gemini-2.5-flash"
+PROPOSER_MODEL = "gemini-3.6-flash"
 MAX_ITERATIONS = 5
 HYPOTHESES_LOG_PATH = "output/falsify/hypotheses.jsonl"
 
