@@ -1,0 +1,128 @@
+name: trading-cron
+
+# Runs the live trading loop on a schedule, independent of any local
+# machine. Matches the timing of the local crontab it replaces:
+# */15 minutes, 20:00-03:59 UTC (the trading-hours window).
+#
+# State: run_agent.py's idempotency check ("did we already decide today")
+# and its hard-drawdown-halt guard's peak-equity tracking both read their
+# entire history from output/audit/decisions.jsonl. GitHub Actions runners
+# start from a fresh clone every run, so that file is persisted across runs
+# on a dedicated `bot-state` branch (not `main`) rather than lost each time.
+# monitor.py needs no local state -- it reads live positions from the
+# broker directly.
+#
+# Also exports and (conditionally) deploys the public dashboard right
+# after run_agent, instead of on its own separate always-on clock. The
+# dashboard's data only changes when a decision gets logged, which only
+# happens when this job runs -- a second independent schedule polling all
+# day was redeploying Vercel even when nothing had changed. A content hash
+# of the exported JSON (also kept on bot-state) skips the deploy on runs
+# where the data is byte-identical to what's already live.
+
+on:
+  schedule:
+    - cron: '*/15 20-23,0-3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trading-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ensure bot-state branch exists
+        run: |
+          if ! git ls-remote --exit-code --heads origin bot-state > /dev/null 2>&1; then
+            git checkout --orphan bot-state
+            git rm -rf . > /dev/null 2>&1 || true
+            mkdir -p output/audit
+            : > output/audit/decisions.jsonl
+            : > dashboard_data_hash.txt
+            git add output/audit/decisions.jsonl dashboard_data_hash.txt
+            git -c user.name="trading-bot" -c user.email="actions@users.noreply.github.com" \
+              commit -m "Initialize bot-state branch"
+            git push origin bot-state
+            git checkout "${GITHUB_REF_NAME}"
+          fi
+
+      - name: Check out persistent state
+        uses: actions/checkout@v4
+        with:
+          ref: bot-state
+          path: state
+
+      - name: Restore persistent state
+        run: |
+          mkdir -p output/audit
+          cp state/output/audit/decisions.jsonl output/audit/decisions.jsonl
+          touch state/dashboard_data_hash.txt
+
+      - name: Run monitor (check open positions for exits)
+        run: python -m pipeline.execution.monitor --run --live
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+
+      - name: Run agent (evaluate today's entry)
+        run: python -m pipeline.run_agent --live
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Export dashboard data
+        if: always()
+        run: python -m scripts.export_dashboard_data
+
+      - name: Check whether dashboard data actually changed
+        if: always()
+        id: data_check
+        run: |
+          NEW_HASH=$(cat public/data/*.json | sha256sum | cut -d' ' -f1)
+          OLD_HASH=$(cat state/dashboard_data_hash.txt 2>/dev/null || echo "")
+          echo "new_hash=$NEW_HASH" >> "$GITHUB_OUTPUT"
+          if [ "$NEW_HASH" = "$OLD_HASH" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy dashboard to Vercel
+        if: always() && steps.data_check.outputs.changed == 'true'
+        run: |
+          npm install -g vercel@latest
+          vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_XDBSyLHvDDZPrYZKvJVY4fLx
+          VERCEL_PROJECT_ID: prj_HIVMFZ3F5wIN9zEtl2neeCMbdFbS
+
+      - name: Persist state back to bot-state
+        if: always()
+        run: |
+          mkdir -p state/output/audit
+          cp output/audit/decisions.jsonl state/output/audit/decisions.jsonl
+          echo "${{ steps.data_check.outputs.new_hash }}" > state/dashboard_data_hash.txt
+          cd state
+          git config user.name "trading-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add output/audit/decisions.jsonl dashboard_data_hash.txt
+          git diff --cached --quiet || git commit -m "Update bot state [skip ci]"
+          git push origin bot-state
