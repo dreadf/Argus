@@ -1,8 +1,20 @@
 name: trading-cron
 
 # Runs the live trading loop on a schedule, independent of any local
-# machine. Matches the timing of the local crontab it replaces:
-# */15 minutes, 20:00-03:59 UTC (the trading-hours window).
+# machine. */15 minutes, 13:00-21:00 UTC.
+#
+# NOTE: the local crontab this replaces was scheduled 20:00-03:59 UTC,
+# which is entirely AFTER the US market closes (real NYSE hours are
+# 13:30-20:00 UTC in EDT, 14:30-21:00 UTC in EST). Verified against
+# Alpaca's live clock and against the one real historical SOLD trade
+# (2026-09-08, 16:38 UTC, inside real hours and outside the old cron
+# window) that the old window likely never placed a trade on its own.
+# This window is deliberately wider than either DST case (13:00-21:00
+# instead of exactly 13:30-20:00 / 14:30-21:00) so it doesn't need manual
+# adjustment twice a year -- run_agent.py's own guards already check
+# Alpaca's real clock and skip cleanly outside actual market hours, so a
+# slightly wider cron window just means a couple of harmless early/late
+# skips at the margins, not a functional problem.
 #
 # State: run_agent.py's idempotency check ("did we already decide today")
 # and its hard-drawdown-halt guard's peak-equity tracking both read their
@@ -22,7 +34,7 @@ name: trading-cron
 
 on:
   schedule:
-    - cron: '*/15 20-23,0-3 * * *'
+    - cron: '*/15 13-21 * * *'
   workflow_dispatch: {}
 
 permissions:
